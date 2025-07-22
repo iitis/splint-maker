@@ -1,0 +1,6 @@
+{
+  "name": "splint-maker",
+  "description": "",
+  "className": "ConcretePlugin",
+  "version": "1.0"
+}
