@@ -143,25 +143,17 @@
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|x64'">input</DynamicSource>
       <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
     </ClCompile>
-    <ClCompile Include="HFMesh.cpp" />
-    <ClCompile Include="HoleFiller.cpp" />
     <ClCompile Include="Siateczka1.cpp" />
-    <ClCompile Include="Siateczka2.cpp" />
-    <ClCompile Include="SymulatorZgryzu.cpp" />
-    <ClCompile Include="Szczeka.cpp" />
+    <ClCompile Include="BiteSim.cpp" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="ConcretePlugin.h" />
     <QtMoc Include="..\..\dpVision\src\gui\ProgressIndicator.h" />
     <ClInclude Include="CollisionDetector.h" />
     <ClInclude Include="CollisionDetector_definitions.h" />
-    <ClInclude Include="HFMesh.h" />
-    <ClInclude Include="HoleFiller.h" />
     <QtMoc Include="moje_widgety.h" />
     <ClInclude Include="Siateczka1.h" />
-    <ClInclude Include="Siateczka2.h" />
-    <ClInclude Include="SymulatorZgryzu.h" />
-    <ClInclude Include="Szczeka.h" />
+    <ClInclude Include="BiteSim.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="triangulacja.h" />
   </ItemGroup>

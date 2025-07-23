@@ -662,12 +662,12 @@ void SplitTriangles2(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2,
 	mesh3->setLabel("ZNALEZIONE");
 	AP::OBJECT::addChild(mesh1->getParentPtr(), mesh3);
 
-	//CModel3D* obj = new CModel3D();
-	//obj->addChild(mesh3);
-	//obj->importChildrenGeometry();
-	//obj->setTransform(mesh1->getGlobalTransformationMatrix());
-	//obj->setLabel("ZNALEZIONE");
+	//CModel3D* szczeka_obj = new CModel3D();
+	//szczeka_obj->addChild(mesh3);
+	//szczeka_obj->importChildrenGeometry();
+	//szczeka_obj->setTransform(mesh1->getGlobalTransformationMatrix());
+	//szczeka_obj->setLabel("ZNALEZIONE");
 
-	//AP::WORKSPACE::addObject(obj);
+	//AP::WORKSPACE::addObject(szczeka_obj);
 }
 

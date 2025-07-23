@@ -5,7 +5,7 @@
 #include "AnnotationPlane.h"
 #include "AnnotationEdges.h"
 
-#include "SymulatorZgryzu.h"
+#include "BiteSim.h"
 
 #include "HFMesh.h"
 #include "HoleFiller.h"
@@ -402,9 +402,6 @@ void ConcretePlugin::etap01(int div)
 		top_model = std::dynamic_pointer_cast<CModel3D>(top_model->getParentPtr());
 	}
 
-	//top_model->setKidsVisibility(false);
-	//top_model->transform().lock(true);
-	
 	top_model_arch = top_model;
 	AP::WORKSPACE::removeModel(top_model);
 
@@ -414,15 +411,13 @@ void ConcretePlugin::etap01(int div)
 
 	m_divider = div;
 
-	//if (symulator != nullptr) delete symulator;
-
-	symulator = std::make_shared<CSymulatorZgryzu>();
+	symulator = std::make_shared<BiteSim>();
 	symulator->m_divider = m_divider;
 
-	symulator->szczeka.inicjuj2(szcz);
+	symulator->szczeka_inicjuj2(szcz);
 
-	symulator->szczeka.obj->transform() = CBaseObject::getGlobalTransformationMatrix(szcz);
-	symulator->szczeka.obj->applyTransform();
+	symulator->szczeka_obj->transform() = CBaseObject::getGlobalTransformationMatrix(szcz);
+	symulator->szczeka_obj->applyTransform();
 
 	Eigen::Matrix4d mSz = CBaseObject::getGlobalTransformationMatrix(szcz);
 	Eigen::Matrix4d mOk = CBaseObject::getGlobalTransformationMatrix(oklu);
@@ -430,15 +425,15 @@ void ConcretePlugin::etap01(int div)
 	//std::cout << mSz << endl;
 	//std::cout << mOk << endl;
 
-	symulator->szczeka.tworzMapeOkluzji2(oklu, mOk, mSz);
+	symulator->szczeka_tworzMapeOkluzji2(oklu, mOk, mSz);
 	
-	//symulator->szczeka.okluzja->transform() = szcz->getGlobalTransformationMatrix();
-	//symulator->szczeka.okluzja->applyTransform();
+	//symulator->szczeka_okluzja->transform() = szcz->getGlobalTransformationMatrix();
+	//symulator->szczeka_okluzja->applyTransform();
 
 	//AP::mainApp().settings->value("plugins/nowaSzyna/cutPlane");
 
-	CBoundingBox bb = symulator->szczeka.obj->getBoundingBox();
-	CBoundingBox bbOk = symulator->szczeka.okluzja->getBoundingBox();
+	CBoundingBox bb = symulator->szczeka_obj->getBoundingBox();
+	CBoundingBox bbOk = symulator->szczeka_okluzja->getBoundingBox();
 
 	if (m_cutPlane == nullptr) {
 		m_cutPlane = std::make_shared<CAnnotationPlane>();
@@ -464,7 +459,7 @@ void ConcretePlugin::etap01(int div)
 
 		//if (il < 0) n2 = -n2;
 
-		CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka.okluzja->getData())->getMainNormalVector();
+		CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka_okluzja->getData())->getMainNormalVector();
 		n2.x = 0.0;
 		n2.y = 0.0;
 
@@ -480,7 +475,7 @@ void ConcretePlugin::etap01(int div)
 	//m_rzutnia->setCenter(m_cutPlane->getCenter());
 	//m_rzutnia->setNormal(m_cutPlane->getNormal());
 
-	AP::MODEL::addAnnotation(symulator->szczeka.obj, m_cutPlane);
+	AP::MODEL::addAnnotation(symulator->szczeka_obj, m_cutPlane);
 	UI::updateAllViews();
 
 	AP::WORKSPACE::setCurrentModel(NO_CURRENT_MODEL);
@@ -497,62 +492,62 @@ void ConcretePlugin::etap01(int div)
 }
 
 
-QMatrix4x4 rotation_matrix_from_vectors(CVector3d _n1, CVector3d _n2) {
-	// Normalize vectors
-	CVector3d n1 = _n1.getNormalized();
-	CVector3d n2 = _n2.getNormalized();
-
-	// Angle of rotation (dot product)
-	double cosTheta = n1.dotProduct(n2);
-	double theta = acos(cosTheta);
-
-	// Check if vectors are anti-parallel
-	if (std::abs(cosTheta + 1.0) < 1e-6) {
-		// Find an orthogonal vector for the axis of rotation
-		CVector3d ortho = n1.crossProduct(CVector3d(1, 0, 0));
-		if (ortho.length() < 1e-6) { // If n1 is parallel to (1,0,0), use a different orthogonal vector
-			ortho = n1.crossProduct(CVector3d(0, 1, 0));
-		}
-		ortho = ortho.getNormalized();
-
-		// 180 degree rotation matrix around orthogonal vector
-		QMatrix4x4 R;
-		double x = ortho.x;
-		double y = ortho.y;
-		double z = ortho.z;
-		R(0, 0) = -1 + 2 * x * x;
-		R(0, 1) = 2 * x * y;
-		R(0, 2) = 2 * x * z;
-		R(1, 0) = 2 * x * y;
-		R(1, 1) = -1 + 2 * y * y;
-		R(1, 2) = 2 * y * z;
-		R(2, 0) = 2 * x * z;
-		R(2, 1) = 2 * y * z;
-		R(2, 2) = -1 + 2 * z * z;
-		R(3, 3) = 1;
-
-		return R;
-	}
-
-	// Axis of rotation (cross product)
-	CVector3d k = n1.crossProduct(n2);
-
-	// Rodrigues' rotation formula components
-	QMatrix4x4 K;
-	K.setRow(0, QVector4D(0, -k.z, k.y, 0));
-	K.setRow(1, QVector4D(k.z, 0, -k.x, 0));
-	K.setRow(2, QVector4D(-k.y, k.x, 0, 0));
-	K.setRow(3, QVector4D(0, 0, 0, 1));
-
-	// Identity matrix
-	QMatrix4x4 I;
-	I.setToIdentity();
-
-	// Compute R using Rodrigues' rotation formula
-	QMatrix4x4 R = I + K * sin(theta) + K * K * (1 - cos(theta));
-
-	return R;
-}
+//QMatrix4x4 rotation_matrix_from_vectors(CVector3d _n1, CVector3d _n2) {
+//	// Normalize vectors
+//	CVector3d n1 = _n1.getNormalized();
+//	CVector3d n2 = _n2.getNormalized();
+//
+//	// Angle of rotation (dot product)
+//	double cosTheta = n1.dotProduct(n2);
+//	double theta = acos(cosTheta);
+//
+//	// Check if vectors are anti-parallel
+//	if (std::abs(cosTheta + 1.0) < 1e-6) {
+//		// Find an orthogonal vector for the axis of rotation
+//		CVector3d ortho = n1.crossProduct(CVector3d(1, 0, 0));
+//		if (ortho.length() < 1e-6) { // If n1 is parallel to (1,0,0), use a different orthogonal vector
+//			ortho = n1.crossProduct(CVector3d(0, 1, 0));
+//		}
+//		ortho = ortho.getNormalized();
+//
+//		// 180 degree rotation matrix around orthogonal vector
+//		QMatrix4x4 R;
+//		double x = ortho.x;
+//		double y = ortho.y;
+//		double z = ortho.z;
+//		R(0, 0) = -1 + 2 * x * x;
+//		R(0, 1) = 2 * x * y;
+//		R(0, 2) = 2 * x * z;
+//		R(1, 0) = 2 * x * y;
+//		R(1, 1) = -1 + 2 * y * y;
+//		R(1, 2) = 2 * y * z;
+//		R(2, 0) = 2 * x * z;
+//		R(2, 1) = 2 * y * z;
+//		R(2, 2) = -1 + 2 * z * z;
+//		R(3, 3) = 1;
+//
+//		return R;
+//	}
+//
+//	// Axis of rotation (cross product)
+//	CVector3d k = n1.crossProduct(n2);
+//
+//	// Rodrigues' rotation formula components
+//	QMatrix4x4 K;
+//	K.setRow(0, QVector4D(0, -k.z, k.y, 0));
+//	K.setRow(1, QVector4D(k.z, 0, -k.x, 0));
+//	K.setRow(2, QVector4D(-k.y, k.x, 0, 0));
+//	K.setRow(3, QVector4D(0, 0, 0, 1));
+//
+//	// Identity matrix
+//	QMatrix4x4 I;
+//	I.setToIdentity();
+//
+//	// Compute R using Rodrigues' rotation formula
+//	QMatrix4x4 R = I + K * sin(theta) + K * K * (1 - cos(theta));
+//
+//	return R;
+//}
 
 QMatrix4x4 planeToTransform(CVector3d norm) {
 	QVector3D planeNormal(norm[0], norm[1], norm[2] );
@@ -605,8 +600,8 @@ void ConcretePlugin::etap11()
 	c.setShape(Qt::CursorShape::WaitCursor);
 	moj_widget->setCursor(c);
 
-	symulator->szczeka.wytnijZebyNEW(m_cutPlane);
-	AP::WORKSPACE::addModel(symulator->szczeka.zeby);
+	symulator->szczeka_wytnijZebyNEW(m_cutPlane);
+	AP::WORKSPACE::addModel(symulator->szczeka_zeby);
 
 	symulator->wnetrze = new CSiateczka1(80, 80, 30, symulator->m_divider); // arguments: sizeX, sizeY, depth, divider
 
@@ -643,7 +638,7 @@ void ConcretePlugin::etap12(double dVal)
 
 	qInfo() << "etap12 -> symulator->generujWnetrzeNEW()";
 
-	symulator->generujWnetrzeNEW(symulator->wnetrze, dVal);
+	symulator->create_inner_surface(symulator->wnetrze, dVal);
 	mesh_wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
 
 
@@ -660,27 +655,29 @@ void ConcretePlugin::etap12(double dVal)
 	moj_widget->setCursor(c);
 }
 
-void ConcretePlugin::odcisk_stepla()
-{
-	qInfo() << "odcisk stempla";
-	std::list<std::shared_ptr<CBaseObject>> sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
-
-	if (sel.size() > 0)
-	{
-		std::list<std::shared_ptr<CBaseObject>>::iterator isel = sel.begin();
-
-		//std::shared_ptr<CMesh>  wierzch1 = ((CMesh*)(*isel))->getCopy();
-		//wierzch1->setParent(nullptr);
-		//isel++;
-		std::shared_ptr<CMesh> stempel = std::dynamic_pointer_cast<CMesh>(*isel);
-		
-		symulator->wierzch->zrobWyciskZuchwy_v1(std::dynamic_pointer_cast<CModel3D>(stempel->getParentPtr()), 0.0, 1);
-
-		symulator->wierzch->klejDziury3();
-		symulator->wierzch->usunNadmiaroweScianki();
-
-	}
-}
+//
+//void ConcretePlugin::odcisk_stepla()
+//{
+//	qInfo() << "odcisk stempla";
+//	std::list<std::shared_ptr<CBaseObject>> sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
+//
+//	if (sel.size() > 0)
+//	{
+//		std::list<std::shared_ptr<CBaseObject>>::iterator isel = sel.begin();
+//
+//		//std::shared_ptr<CMesh>  wierzch1 = ((CMesh*)(*isel))->getCopy();
+//		//wierzch1->setParent(nullptr);
+//		//isel++;
+//		std::shared_ptr<CMesh> stempel = std::dynamic_pointer_cast<CMesh>(*isel);
+//		
+//		symulator->wierzch->zrobWyciskZuchwy_v1(std::dynamic_pointer_cast<CModel3D>(stempel->getParentPtr()), 0.0, 1);
+//
+//		symulator->wierzch->klejDziury3();
+//		symulator->wierzch->usunNadmiaroweScianki();
+//
+//	}
+//}
+//
 
 void ConcretePlugin::etap13_v2(double dVal)
 {
@@ -703,8 +700,7 @@ void ConcretePlugin::etap13_v2(double dVal)
 	AP::WORKSPACE::addObject(zu);
 	((CModel3D*)zu->getParent())->transform() = mm;
 
-	//symulator->generujWierzchOdRazu3(dVal, zu);
-	symulator->generujWierzchOdRazu3_CSiateczka1_v2(dVal, zu);
+	symulator->create_outer_surface(dVal, zu);
 	
 	mesh_wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
 
@@ -726,50 +722,51 @@ void ConcretePlugin::etap13_v2(double dVal)
 	moj_widget->setCursor(c);
 }
 
-void ConcretePlugin::etap13(double dVal)
-{
-	moj_widget->etap13->setDisabled(true);
-
-	QCursor c = moj_widget->cursor();
-	c.setShape(Qt::CursorShape::WaitCursor);
-	moj_widget->setCursor(c);
-
-	qInfo() << "etap13 - symulator->generujWierzchOdRazu2()";
-
-	std::shared_ptr<CMesh> zu = std::dynamic_pointer_cast<CMesh>(zuch->getCopy());
-
-	Eigen::Matrix4d ms = CBaseObject::getGlobalTransformationMatrix(szcz_parent);
-	Eigen::Matrix4d mz = CBaseObject::getGlobalTransformationMatrix(zuch);
-
-	//UWAGA to moze byc potrzebny wybór ms lub mz w zależności od położenia źródłowej żuchwy
-	Eigen::Matrix4d mm = ms;// mz;
-
-	AP::WORKSPACE::addObject(zu);
-	((CModel3D*)zu->getParent())->transform() = mm;
-
-	//symulator->generujWierzchOdRazu3(dVal, zu);
-	symulator->generujWierzchOdRazu3_CSiateczka1(dVal, zu);
-
-	mesh_wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
-
-	UI::DOCK::WORKSPACE::update();
-
-	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
-
-	m_cutPlane->setSelfVisibility(true);
-	UI::updateAllViews();
-
-	moj_widget->etap14 = new WidgetInfo({ QString::fromUtf8("Możesz teraz jeszcze skorygować ustawienie płaszczyzny cięcia. Następnie kliknij przycisk \"Dotnj\".") });
-	moj_widget->etap14->btStart->setText("Dotnij");
-
-	moj_layout->addRow(moj_widget->etap14);
-
-	QObject::connect(moj_widget->etap14->btStart, &QPushButton::clicked, [&]() { etap14(); });
-
-	c.setShape(Qt::CursorShape::ArrowCursor);
-	moj_widget->setCursor(c);
-}
-
+//
+//void ConcretePlugin::etap13(double dVal)
+//{
+//	moj_widget->etap13->setDisabled(true);
+//
+//	QCursor c = moj_widget->cursor();
+//	c.setShape(Qt::CursorShape::WaitCursor);
+//	moj_widget->setCursor(c);
+//
+//	qInfo() << "etap13 - symulator->generujWierzchOdRazu2()";
+//
+//	std::shared_ptr<CMesh> zu = std::dynamic_pointer_cast<CMesh>(zuch->getCopy());
+//
+//	Eigen::Matrix4d ms = CBaseObject::getGlobalTransformationMatrix(szcz_parent);
+//	Eigen::Matrix4d mz = CBaseObject::getGlobalTransformationMatrix(zuch);
+//
+//	//UWAGA to moze byc potrzebny wybór ms lub mz w zależności od położenia źródłowej żuchwy
+//	Eigen::Matrix4d mm = ms;// mz;
+//
+//	AP::WORKSPACE::addObject(zu);
+//	((CModel3D*)zu->getParent())->transform() = mm;
+//
+//	//symulator->generujWierzchOdRazu3(dVal, zu);
+//	symulator->generujWierzchOdRazu3_CSiateczka1(dVal, zu);
+//
+//	mesh_wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
+//
+//	UI::DOCK::WORKSPACE::update();
+//
+//	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
+//
+//	m_cutPlane->setSelfVisibility(true);
+//	UI::updateAllViews();
+//
+//	moj_widget->etap14 = new WidgetInfo({ QString::fromUtf8("Możesz teraz jeszcze skorygować ustawienie płaszczyzny cięcia. Następnie kliknij przycisk \"Dotnj\".") });
+//	moj_widget->etap14->btStart->setText("Dotnij");
+//
+//	moj_layout->addRow(moj_widget->etap14);
+//
+//	QObject::connect(moj_widget->etap14->btStart, &QPushButton::clicked, [&]() { etap14(); });
+//
+//	c.setShape(Qt::CursorShape::ArrowCursor);
+//	moj_widget->setCursor(c);
+//}
+//
 
 #include "AnnotationPoints.h"
 
@@ -790,7 +787,7 @@ void decapitation(std::shared_ptr<CBaseObject> victim, std::shared_ptr<CAnnotati
 	Eigen::Matrix4d T1 = CBaseObject::getGlobalTransformationMatrix(victim);
 	Eigen::Matrix4d T1inv = T1.inverse();
 
-	p1 = T1inv * p1; // do wsp. obj
+	p1 = T1inv * p1; // do wsp. szczeka_obj
 	p2 = T1inv * p2;
 
 	p.m_center = p1;
@@ -850,11 +847,7 @@ void ConcretePlugin::etap14()
 
 	decapitation(wierzch, m_cutPlane);
 
-	//wierzch->removeDuplicateVertices();
-
-	//removeSpikes(wierzch);
-
-	//////////////////////////////////////////////////////////////
+	//----------------------------------------------------------------
 
 	symulator->wnetrze->obj->applyTransform();
 
@@ -862,37 +855,25 @@ void ConcretePlugin::etap14()
 
 	decapitation(wnetrze, m_cutPlane);
 
-	//wnetrze->removeDuplicateVertices();
+	//----------------------------------------------------------------
 
-	//removeSpikes(wnetrze);
+	//((CModel3D*)symulator->mBD->getParent())->applyTransform();
 
-	//////////////////////////////////////////////////////////////
+	//std::shared_ptr<CMesh>  _mBD = symulator->mBD;
 
-	((CModel3D*)symulator->mBD->getParent())->applyTransform();
+	//decapitation(_mBD, m_cutPlane);
 
-	std::shared_ptr<CMesh>  _mBD = symulator->mBD;
+	//----------------------------------------------------------------
 
-	decapitation(_mBD, m_cutPlane);
+	//((CModel3D*)symulator->mZD->getParent())->applyTransform();
 
-	//_mBD->removeDuplicateVertices();
+	//std::shared_ptr<CMesh>  _mZD = symulator->mZD;
 
-	//removeSpikes(wnetrze);
+	//decapitation(_mZD, m_cutPlane);
 
-	//////////////////////////////////////////////////////////////
+	//----------------------------------------------------------------
 
-	((CModel3D*)symulator->mZD->getParent())->applyTransform();
-
-	std::shared_ptr<CMesh>  _mZD = symulator->mZD;
-
-	decapitation(_mZD, m_cutPlane);
-
-	//_mZD->removeDuplicateVertices();
-
-	//removeSpikes(wnetrze);
-
-	/////////////////////////////////////////////////////////////
-
-	AP::OBJECT::removeChild(symulator->szczeka.obj, m_cutPlane);
+	AP::OBJECT::removeChild(symulator->szczeka_obj, m_cutPlane);
 
 	UI::DOCK::WORKSPACE::update();
 
@@ -987,7 +968,7 @@ void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 
 	obj->save(path);
 
-	//delete obj;
+	//delete szczeka_obj;
 }
 
 void ConcretePlugin::go_to_multisaver()
@@ -1340,19 +1321,6 @@ void ConcretePlugin::run(void)
 #include "AnnotationPath.h"
 #include "AnnotationVPath.h"
 
-void ConcretePlugin::pickSlot( int objId, CAnnotationPoint &pt )
-{
-//	if ( m_picking && (3 > symulator->szczeka.obj->annotationPoints().size()) )
-//	{
-//		pt.setLabel( L"punkt" );
-//		AP::addAnnotationPoint( objId, pt );
-
-//		std::wstring lab( L"Picked: " + pt.getLabel() + L" [" + std::to_wstring((long long)pt.X()) + L"," + std::to_wstring((long long)pt.Y()) + L"," + std::to_wstring((long long)pt.Z()) + L"]" );
-//		UI::PLUGINPANEL::setLabel( m_ID, L"label01", lab );
-//	}
-}
-
-
 
 void ConcretePlugin::znajdzWierzcholkiBrzegowe(std::shared_ptr<CMesh>  mesh, std::set<unsigned int>& boundaryVertices)
 {
@@ -1464,83 +1432,6 @@ int ConcretePlugin::usunWadliweScianki(std::shared_ptr<CMesh>  mesh)
 
 	return result;
 }
-
-
-void ConcretePlugin::wytnijDekiel(std::shared_ptr<CMesh>  rzutWierzchu, std::shared_ptr<CMesh>  rzutWnetrza)
-{
-	std::set<unsigned int> boundaryVertices1;
-	znajdzWierzcholkiBrzegowe(rzutWierzchu, boundaryVertices1);
-
-	std::set<unsigned int> boundaryVertices2;
-	znajdzWierzcholkiBrzegowe(rzutWnetrza, boundaryVertices2);
-
-	std::set<unsigned int> verticesToRemove;
-
-
-	//std::vector<CIndexedTriangle> tVector;
-	//std::vector<CIndexedTriangle*> tris;
-
-	//for (int j = 0; j<rzutWnetrza->faces().size(); j++)
-	//{
-	//	tVector.push_back(CIndexedTriangle(j, *rzutWnetrza));
-	//}
-
-	//for (auto& t : tVector)
-	//{
-	//	tris.push_back(&t);
-	//}
-
-
-	//UI::STATUSBAR::setText(L"Building KDTree for faces, please wait...");
-	//KDNode *node = KDNode::build2(tris, 0);
-
-	for (unsigned int i = 0; i < rzutWierzchu->vertices().size(); i++)
-	{
-		if (boundaryVertices1.find(i) == boundaryVertices1.end()) // brzegowych nie wolno ruszyć !
-		{
-
-			//KDNode::ShadeRec sr;
-			//sr.vidx = i;
-			//sr.fidxs.clear();
-
-			//if (node->hit(rzutWierzchu->vertices()[i], ray, sr)) // TEST PRZECINANIA
-			//{
-			//	verticesToRemove.insert(i);
-			//}
-
-
-			int idx = rzutWnetrza->getKDtree(CPointCloud::KDtree::PRESERVE).closest_to_pt(rzutWierzchu->vertices()[i], 0.07);
-
-			if (idx >= 0)
-			{
-				//	if (boundaryVertices2.find(idx) == boundaryVertices2.end()) // brzegowych nie wolno ruszyć !
-				//	{
-				verticesToRemove.insert(i);
-				//	}
-				//	else
-				//	{
-				//rzutWierzchu->vertices()[i].Set(rzutWnetrza->vertices()[idx]);
-				//	}
-			}
-		}
-	}
-
-	//delete node;
-
-	for (long j = rzutWierzchu->faces().size() - 1; j >= 0; j--)
-	{
-		CFace f = rzutWierzchu->faces()[j];
-		if ((verticesToRemove.find(f.A()) != verticesToRemove.end()) ||
-			(verticesToRemove.find(f.B()) != verticesToRemove.end()) ||
-			(verticesToRemove.find(f.C()) != verticesToRemove.end()))
-		{
-			rzutWierzchu->removeFace(j);
-		}
-	}
-
-	rzutWierzchu->removeUnusedVertices();
-}
-
 
 void ConcretePlugin::wytnijDekiel2(std::shared_ptr<CMesh>  rzutWierzchu, std::shared_ptr<CMesh>  wnetrze)
 {
@@ -1698,8 +1589,6 @@ std::shared_ptr<CMesh>  ConcretePlugin::dekiel_cien( std::shared_ptr<CMesh> wier
 
 	calosc->removeUnusedVertices();
 
-//	naprawMaleCykle(calosc);
-
 	return calosc;
 }
 
@@ -1742,984 +1631,6 @@ void ConcretePlugin::createE2Fmap(std::shared_ptr<CMesh> mesh, MapOfNewEdges& al
 	}
 }
 
-
-void ConcretePlugin::removeSpikes(std::shared_ptr<CMesh> mesh)
-{
-	//mesh->removeDuplicateVertices( 0.01 );
-
-	std::set<unsigned int> badFaces;
-
-	for (int j = 0; j < mesh->faces().size(); j++) badFaces.insert(j);
-
-	CMesh::V2Fmap v2fmap;
-
-	mesh->createV2Fmap(v2fmap);
-
-	std::set<unsigned int> toCheck;
-	std::set<unsigned int> checked;
-
-	toCheck.insert(0);
-
-	while (!toCheck.empty())
-	{
-		unsigned int currentIdx = *toCheck.begin();
-
-		CFace& f = mesh->faces()[currentIdx];
-
-		for (auto s : v2fmap[f.A()])
-		{
-			if (checked.find(s)==checked.end())
-				toCheck.insert(s);
-		}
-
-		for (auto s : v2fmap[f.B()])
-		{
-			if (checked.find(s) == checked.end())
-				toCheck.insert(s);
-		}
-
-		for (auto s : v2fmap[f.C()])
-		{
-			if (checked.find(s) == checked.end())
-				toCheck.insert(s);
-		}
-
-		checked.insert(currentIdx);
-		toCheck.erase(currentIdx);
-		badFaces.erase(currentIdx);
-	}
-
-	for (std::set<unsigned int>::reverse_iterator rit = badFaces.rbegin(); rit != badFaces.rend(); rit++)
-	{
-		mesh->removeFace(*rit);
-	}
-
-	mesh->removeUnusedVertices();
-}
-
-
-std::shared_ptr<CMesh> ConcretePlugin::zrzutujNaGestaSiatke(std::shared_ptr<CModel3D> obj, MapOfNewEdges* cykl1, MapOfNewEdges* cykl2, CPlane *rzutnia)
-{
-	CSiateczka1* siateczka = new CSiateczka1(80, 80, 30, 50);
-	siateczka->obj->setTransform(rzutnia->toTransform());
-	siateczka->zbudujSiatke(obj);
-
-	siateczka->zrobWycisk(obj);
-
-	dodajMeshDoProjektu(std::dynamic_pointer_cast<CMesh>(siateczka->obj->getChild()), "gestyrzut");
-
-	return std::dynamic_pointer_cast<CMesh>(siateczka->obj->getChild());
-}
-
-void ConcretePlugin::znajdzNajblizsze(std::shared_ptr<CMesh>  mesh, MapOfNewEdges* cykl1, MapOfNewEdges* cykl2, MapOfNewEdges::iterator &idx1, MapOfNewEdges::iterator &idx2 )
-{
-	double minDist = DBL_MAX;
-
-	MapOfNewEdges::iterator i1 = cykl1->begin();
-
-	while (i1 != cykl1->end())
-	{
-		CVertex v1 = mesh->vertices()[i1->first.first];
-
-		MapOfNewEdges::iterator i2 = cykl2->begin();
-		while (i2 != cykl2->end())
-		{
-			CVertex v2 = mesh->vertices()[i2->first.first];
-
-			double dist = CVector3d(v1, v2).squaredLength();
-
-			if (dist < minDist)
-			{
-				minDist = dist;
-				idx1 = i1;
-				idx2 = i2;
-			}
-
-			i2++;
-		}
-
-		i1++;
-	}
-}
-
-
-void ConcretePlugin::znajdzNajblizsze(std::shared_ptr<CMesh> mesh, std::shared_ptr<CAnnotationVPath> cykl1, std::shared_ptr<CAnnotationVPath> cykl2, std::list<INDEX_TYPE>::iterator& idx1, std::list<INDEX_TYPE>::iterator& idx2)
-{
-	double minDist = DBL_MAX;
-
-	std::list<INDEX_TYPE>::iterator i1 = cykl1->begin();
-
-	while (i1 != cykl1->end())
-	{
-		CVertex v1 = mesh->vertices()[*i1];
-
-		std::list<INDEX_TYPE>::iterator i2 = cykl2->begin();
-		while (i2 != cykl2->end())
-		{
-			CVertex v2 = mesh->vertices()[*i2];
-
-			double dist = CVector3d(v1, v2).squaredLength();
-
-			if (dist < minDist)
-			{
-				minDist = dist;
-				idx1 = i1;
-				idx2 = i2;
-			}
-
-			i2++;
-		}
-
-		i1++;
-	}
-}
-
-
-MapOfNewEdges::iterator ConcretePlugin::znajdzNajblizszy(std::shared_ptr<CMesh>  mesh, MapOfNewEdges* cykl1, unsigned int i2)
-{
-	double minDist = DBL_MAX;
-
-	MapOfNewEdges::iterator i1 = cykl1->begin();
-
-	MapOfNewEdges::iterator idx1 = cykl1->end();
-
-	CVertex t = mesh->vertices()[i2];
-
-	while (i1 != cykl1->end())
-	{
-		CVertex v1 = mesh->vertices()[i1->first.first];
-
-		double dist = CVector3d(v1, t).squaredLength();
-
-		if (dist < minDist)
-		{
-			minDist = dist;
-			idx1 = i1;
-		}
-
-		i1++;
-	}
-
-	return idx1;
-}
-
-
-std::list<INDEX_TYPE>::iterator ConcretePlugin::znajdzNajblizszy(std::shared_ptr<CMesh>  mesh, std::shared_ptr<CAnnotationVPath> cykl1, unsigned int i2)
-{
-	double minDist = DBL_MAX;
-
-	std::list<INDEX_TYPE>::iterator i1 = cykl1->begin();
-
-	std::list<INDEX_TYPE>::iterator idx1 = cykl1->end();
-
-	CVertex t = mesh->vertices()[i2];
-
-	while (i1 != cykl1->end())
-	{
-		CVertex v1 = mesh->vertices()[*i1];
-
-		double dist = CVector3d(v1, t).squaredLength();
-
-		if (dist < minDist)
-		{
-			minDist = dist;
-			idx1 = i1;
-		}
-
-		i1++;
-	}
-
-	return idx1;
-}
-
-
-
-double calcDist(std::shared_ptr<CMesh>  mesh, unsigned int i1, unsigned int i2)
-{
-	return CVector3d(mesh->vertices()[i1], mesh->vertices()[i2]).length();
-}
-
-void ConcretePlugin::zaklejNajblizsze(std::shared_ptr<CMesh>  mesh, MapOfNewEdges* cykl1, MapOfNewEdges* cykl2)
-{
-	MapOfNewEdges::iterator idx1;
-	MapOfNewEdges::iterator idx2;
-
-	znajdzNajblizsze(mesh, cykl1, cykl2, idx1, idx2);
-
-	while ((idx1 != cykl1->end()) && (idx2 != cykl2->end()))
-	{
-		UI::STATUSBAR::printfTimed(500, L"Zaklejanie najbliższych (%d)", cykl1->size());
-
-		unsigned int i10 = idx1->first.first;
-		unsigned int i11 = idx1->first.second;
-
-		unsigned int i20 = idx2->first.first;
-		unsigned int i21 = idx2->first.second;
-
-		mesh->faces().push_back(CFace(i11, i10, i21));
-		mesh->faces().push_back(CFace(i10, i20, i21));
-
-		cykl1->erase(idx1);
-		cykl2->erase(idx2);
-
-		MapOfNewEdges::iterator i1 = cykl1->findVertex(i11);
-		MapOfNewEdges::iterator i2 = cykl2->findVertex(i21);
-		
-		MapOfNewEdges::iterator n1 = cykl2->end();
-		MapOfNewEdges::iterator n2 = cykl1->end();
-
-		double i1n1 = DBL_MAX;
-		if (i1 != cykl1->end())
-		{
-			n1 = znajdzNajblizszy(mesh, cykl2, i1->first.first);
-			i1n1 = calcDist(mesh, i1->first.first, n1->first.first);
-		}
-
-		double i2n2 = DBL_MAX;
-		if (i2 != cykl2->end())
-		{
-			n2 = znajdzNajblizszy(mesh, cykl1, i2->first.first);
-			i2n2 = calcDist(mesh, i2->first.first, n2->first.first);
-		}
-
-		if ( i1n1 < i2n2 )
-		{
-			idx1 = i1;
-			idx2 = n1;
-		}
-		else
-		{
-			idx2 = i2;
-			idx1 = n2;
-		}
-	}
-}
-
-
-void ConcretePlugin::zaklejNajblizsze(std::shared_ptr<CMesh>  mesh, std::shared_ptr<CAnnotationVPath> cykl1, std::shared_ptr<CAnnotationVPath> cykl2)
-{
-	std::list<INDEX_TYPE>::iterator idx1;
-	std::list<INDEX_TYPE>::iterator idx2;
-
-	znajdzNajblizsze(mesh, cykl1, cykl2, idx1, idx2);
-
-	while ((idx1 != cykl1->end()) && (idx2 != cykl2->end()))
-	{
-		UI::STATUSBAR::printfTimed(500, L"Zaklejanie najbliższych (%d)", cykl1->size());
-
-		unsigned int i10 = *idx1;
-		std::list<INDEX_TYPE>::iterator i1 = idx1; i1++;
-		if (i1 == cykl1->end()) i1 = cykl1->begin();
-		unsigned int i11 = *i1;
-
-		unsigned int i20 = *idx2;
-		std::list<INDEX_TYPE>::iterator i2 = idx2; i2++;
-		if (i2 == cykl2->end()) i2 = cykl2->begin();
-		unsigned int i21 = *i2;
-
-		cykl1->erase(idx1);
-		cykl2->erase(idx2);
-
-		mesh->faces().push_back(CFace(i11, i10, i21));
-		mesh->faces().push_back(CFace(i10, i20, i21));
-
-		if (cykl1->empty()) return;
-		if (cykl2->empty()) return;
-
-
-		std::list<INDEX_TYPE>::iterator n1 = cykl2->end();
-		std::list<INDEX_TYPE>::iterator n2 = cykl1->end();
-
-		double i1n1 = DBL_MAX;
-		if (i1 != cykl1->end())
-		{
-			n1 = znajdzNajblizszy(mesh, cykl2, *i1);
-			i1n1 = calcDist(mesh, *i1, *n1 );
-		}
-
-		double i2n2 = DBL_MAX;
-		if (i2 != cykl2->end())
-		{
-			n2 = znajdzNajblizszy(mesh, cykl1, *i2);
-			i2n2 = calcDist(mesh, *i2, *n2);
-		}
-
-		if (i1n1 < i2n2)
-		{
-			idx1 = i1;
-			idx2 = n1;
-		}
-		else
-		{
-			idx2 = i2;
-			idx1 = n2;
-		}
-	}
-}
-
-
-void ConcretePlugin::zaklej1cykl(std::shared_ptr<CMesh> mesh, std::shared_ptr<CAnnotationVPath> path)
-{
-	std::list<INDEX_TYPE>& cykl = *path;
-
-	std::list<INDEX_TYPE>::iterator idx = cykl.begin();
-	
-	std::list<INDEX_TYPE>::iterator next1 = path->cyclicNext(idx);
-	std::list<INDEX_TYPE>::iterator next2 = path->cyclicNext(next1);
-
-
-	mesh->faces().push_back(CFace(*next2, *next1, *idx));
-
-}
-
-
-void test1mm(std::shared_ptr<CMesh>  mesh, std::list<INDEX_TYPE>& indexes, INDEX_TYPE idx)
-{
-	CPoint3f pt = mesh->vertices()[idx];
-
-	std::vector<INDEX_TYPE> found = mesh->getKDtree(CPointCloud::KDtree::PRESERVE).find_k_closest_to_pt(10, pt, 1.0f);
-
-
-}
-
-
-void ConcretePlugin::naprawMaleCykle(std::shared_ptr<CMesh> mesh)
-{
-	std::set<std::shared_ptr<CAnnotationVPath>> cykle;
-	
-	krawedzieMetoda1(mesh, cykle);
-	
-	std::set<std::shared_ptr<CAnnotationVPath>>::iterator cit = cykle.begin();
-	
-	while ( !cykle.empty() && (cit != cykle.end()) )
-	{
-		UI::STATUSBAR::printfTimed(100, L"Naprawiam dziury, cykle: %d", cykle.size());
-		std::list<INDEX_TYPE>& path = **cit;
-
-		if (path.size() < 3)
-		{
-			cykle.erase(cit);
-		}
-		else if (path.size() < 4)
-		{
-			INDEX_TYPE a = path.back();
-			path.pop_back();
-			INDEX_TYPE b = path.back();
-			path.pop_back();
-			INDEX_TYPE c = path.back();
-			path.pop_back();
-
-			mesh->faces().push_back(CFace(a, b, c));
-
-			cykle.erase(cit);
-		}
-		else if (path.size() < 5)
-		{
-			INDEX_TYPE a = path.back();
-			path.pop_back();
-			INDEX_TYPE b = path.back();
-			path.pop_back();
-			INDEX_TYPE c = path.back();
-			path.pop_back();
-			INDEX_TYPE d = path.back();
-			path.pop_back();
-
-			double ac = CVector3d(mesh->vertices()[a], mesh->vertices()[c]).squaredLength();
-			double bd = CVector3d(mesh->vertices()[b], mesh->vertices()[d]).squaredLength();
-
-			if (ac < bd)
-			{
-				mesh->faces().push_back(CFace(a, b, c));
-				mesh->faces().push_back(CFace(a, c, d));
-			}
-			else
-			{
-				mesh->faces().push_back(CFace(a, b, d));
-				mesh->faces().push_back(CFace(b, c, d));
-			}
-
-			cykle.erase(cit);
-		}
-		else
-		{
-			double minDist = DBL_MAX;
-			std::list<INDEX_TYPE>::iterator p1=path.begin();
-			std::list<INDEX_TYPE>::iterator p2 = p1; p2++; p2++;
-			std::list<INDEX_TYPE>::iterator found = path.end();
-
-			while (p2 != path.end())
-			{
-				double dist = CVector3d(mesh->vertices()[*p1], mesh->vertices()[*p2]).squaredLength();
-				if (dist < minDist)
-				{
-					minDist = dist;
-					found = p2;
-				}
-				p2++;
-			}
-
-			std::shared_ptr<CAnnotationVPath> nowy = std::make_shared<CAnnotationVPath>();
-
-			p2 = p1;
-			nowy->push_back(*p2);
-
-			p2++;
-			while (p2 != found)
-			{
-				nowy->push_back(*p2);
-				p2 = path.erase(p2);
-
-				if (p2 == path.end()) p2 = path.begin();
-			}
-
-			nowy->push_back(*found);
-
-			
-			cykle.insert(nowy);
-		}
-
-		cit = cykle.begin();
-	}
-}
-
-
-
-
-
-void ConcretePlugin::krawedzieMetoda1(std::shared_ptr<CMesh>  wierzch, std::set<std::shared_ptr<CAnnotationVPath>>& edges)
-{
-	CMesh::Edges foundEdges;
-
-	wierzch->findBoundaryEdges(foundEdges);// , brzegowe);
-
-	while (!foundEdges.empty())
-	{
-		std::shared_ptr<CAnnotationVPath> pts1 = std::make_shared<CAnnotationVPath>();
-
-		std::set<CEdge>::iterator ie = foundEdges.begin();
-		CEdge e0 = *ie;
-
-		do
-		{
-			size_t v1 = ie->first;
-			size_t v2 = ie->second;
-
-			pts1->push_back(v1);
-
-			foundEdges.erase(ie);
-
-			ie = foundEdges.findFirstVertex(v2);
-
-		} while ((ie != foundEdges.end()) && (ie->first != e0.first));
-
-		edges.insert(pts1);
-	}
-}
-
-
-std::shared_ptr<CMesh> ConcretePlugin::wyciskNaWnetrzu(std::shared_ptr<CMesh>  wnetrze, CPlane cutPlane)
-{
-	CSiateczka1 *rzutnia = new CSiateczka1(80,80,30, symulator->m_divider);
-	rzutnia->obj->setTransform(cutPlane.toTransform());
-
-	rzutnia->tworzMesh(wnetrze);
-
-	return std::make_shared<CMesh>();
-}
-
-
-int ConcretePlugin::uproscCykl(std::shared_ptr<CMesh>  mesh, std::shared_ptr<CAnnotationVPath> cykl)
-{
-	std::list<INDEX_TYPE>& path = *cykl;
-
-		int lbzmian = 0;
-
-		std::list<INDEX_TYPE>::iterator it = path.begin();
-		
-		while (it != path.end())
-		{
-			std::list<INDEX_TYPE>::iterator next;
-			if (*it == path.back())
-			{
-				next = path.begin();
-			}
-			else
-			{
-				next = it; next++;
-			}
-				
-
-			if (next != path.end())
-			{
-				CVertex& pt1 = mesh->vertices()[*it];
-				CVertex& pt2 = mesh->vertices()[*next];
-
-				if (CVector3d(pt1, pt2).length() < 0.05)
-				{
-					lbzmian++;
-					pt1 = (pt1 + pt2) / 2;
-					pt2 = pt1;
-
-					if (*it < *next)
-					{
-						path.erase(next);
-					}
-					else
-					{
-						it = path.erase(it);
-					}
-				}
-			}
-			it++;
-		}
-		UI::STATUSBAR::printfTimed(500, L"Liczba zmian: %d", lbzmian);
-
-	return lbzmian;
-}
-
-
-void ConcretePlugin::krawedzieMetoda1( std::shared_ptr<CMesh>  wierzch, std::set<std::shared_ptr<CAnnotationEdges>> &edges)
-{
-	CMesh::Edges foundEdges;
-
-	wierzch->findBoundaryEdges(foundEdges);// , brzegowe);
-
-	while (!foundEdges.empty())
-	{
-		std::shared_ptr<CAnnotationEdges> pts1 = std::make_shared<CAnnotationEdges>();
-
-		std::set<CEdge>::iterator ie = foundEdges.begin();
-		CEdge e0 = *ie;
-
-		do
-		{
-			size_t v1 = ie->first;
-			size_t v2 = ie->second;
-
-			pts1->addEdge(wierzch->vertices()[v1], wierzch->vertices()[v2], ie->face);
-
-			foundEdges.erase(ie);
-
-			ie = foundEdges.findFirstVertex(v2);
-
-		} while ((ie != foundEdges.end()) && (ie->first != e0.first));
-
-		edges.insert(pts1);
-	}
-}
-
-
-
-void ConcretePlugin::onButton( std::wstring name )
-{
-	if (0 == name.compare(L"dekiel_cien"))
-	{
-		etap_dekiel_cien();
-	}
-	else if (0 == name.compare(L"krok23"))
-	{
-		//UI::PLUGINPANEL::removeWidget(m_ID, L"krok23");
-		UI::PLUGINPANEL::removeWidget(m_ID, L"wdlabel");
-		m_workdir = UI::PLUGINPANEL::getEditBoxValue(m_ID, L"workdir");
-		UI::PLUGINPANEL::removeWidget(m_ID, L"workdir");
-
-		std::shared_ptr<CModel3D> obj = AP::WORKSPACE::getCurrentModel();
-
-		if ( (NULL != obj) && (obj->getChild()->hasType(CObject::MESH) ) )
-		{
-			std::shared_ptr<CMesh> wierzch = std::dynamic_pointer_cast<CMesh>(obj->getChild());
-
-			std::shared_ptr<HFMesh> m = std::make_shared<HFMesh>();
-
-			for (CVertex v : wierzch->vertices())
-				m->addVertex(v.toVector());
-
-			for (CFace f : wierzch->faces())
-				m->addTriangle(f.A(), f.B(), f.C());
-
-			HoleFiller hFiller(*m);
-
-			hFiller.fillHoles();
-
-			auto model = std::make_shared<CModel3D>();
-			auto mesh = std::make_shared<CMesh>();
-
-			for (HFVertex * hv : m->verts)
-				mesh->addVertex(CVertex(hv->coords[0], hv->coords[1], hv->coords[2]));
-
-			for (HFTriangle * hft : m->tris)
-				mesh->faces().push_back(CFace(hft->v1i, hft->v2i, hft->v3i));
-
-			model->addChild(model, mesh);
-
-			model->setMin(mesh->getMin());
-			model->setMax(mesh->getMax());
-
-			AP::WORKSPACE::addModel(model);
-
-			UI::DOCK::WORKSPACE::update();
-		}
-		//UI::PLUGINPANEL::addButton(m_ID, L"krok14", L"dotnij", 5, 0);
-	}
-	else if (0 == name.compare(L"krok15"))
-	{
-		UI::PLUGINPANEL::removeWidget(m_ID, L"krok15");
-
-		std::set<std::shared_ptr<CAnnotationEdges>> edges;
-
-		krawedzieMetoda1(std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild()), edges);
-
-		for ( auto p : edges)
-		{
-			AP::MODEL::addAnnotation(symulator->wierzch->obj, p);
-		}
-
-		edges.clear();
-
-
-		krawedzieMetoda1(std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild()), edges);
-
-		for (auto p : edges)
-		{
-			AP::MODEL::addAnnotation(symulator->wnetrze->obj, p);
-		}
-
-		edges.clear();
-
-	}
-	else if (0 == name.compare(L"naprawmalecykle"))
-	{
-		std::shared_ptr<CModel3D> obj = AP::WORKSPACE::getCurrentModel();
-
-		if ((NULL == obj) || !obj->getChild()->hasType(CObject::MESH)) return;
-
-
-		std::shared_ptr<CMesh> mesh = std::dynamic_pointer_cast<CMesh>(obj->getChild());
-
-		naprawMaleCykle(mesh);
-	}
-	else if (0 == name.compare(L"testkraw2"))
-	{
-		m_workdir = UI::PLUGINPANEL::getEditBoxValue(m_ID, L"workdir");
-		
-		std::shared_ptr<CModel3D> obj = AP::WORKSPACE::getCurrentModel();
-
-		if ((NULL == obj) || !obj->getChild()->hasType(CObject::MESH)) return;
-
-
-		std::shared_ptr<CMesh> mesh = std::dynamic_pointer_cast<CMesh>(obj->getChild());
-
-		std::set<std::shared_ptr<CAnnotationVPath>> edges;
-
-		krawedzieMetoda1(mesh, edges);
-
-		if (edges.size() > 1)
-		{
-			//szukam dwóch najdłuższych
-			std::shared_ptr<CAnnotationVPath> cykl1 = nullptr;
-			std::shared_ptr<CAnnotationVPath> cykl2;
-
-
-			for (auto c : edges)
-			{
-				if ((cykl1 == nullptr) || (c->size() > cykl1->size()))
-				{
-					cykl2 = cykl1;
-					cykl1 = c;
-				}
-				else if ((cykl2 == nullptr) || (c->size() > cykl2->size()))
-				{
-					cykl2 = c;
-				}
-			}
-
-			int z = 0;
-			do {
-				z = uproscCykl(mesh, cykl1);
-				mesh->removeDuplicateVertices();
-				usunWadliweScianki(mesh);
-			} while (z > 0);
-			
-			
-			
-			do {
-				uproscCykl(mesh, cykl2);
-				mesh->removeDuplicateVertices();
-				usunWadliweScianki(mesh);
-			} while (z > 0);
-
-
-			std::list<INDEX_TYPE>::iterator curr1;
-			std::list<INDEX_TYPE>::iterator curr2;
-
-			znajdzNajblizsze(mesh, cykl1, cykl2, curr1, curr2);
-
-			std::list<INDEX_TYPE>::iterator next1 = cykl1->cyclicNext(curr1);
-			std::list<INDEX_TYPE>::iterator next2 = cykl2->cyclicPrev(curr2);
-
-			mesh->faces().push_back(CFace(*next1, *curr1, *next2));
-			mesh->faces().push_back(CFace(*curr1, *curr2, *next2));
-
-			//for (auto p : edges) delete p;
-			//edges.clear();
-
-		}
-		else if (!edges.empty())
-		{
-			//delunay(mesh, (*edges.begin())->m_list);
-			//zaklej1cykl( mesh, *edges.begin() );
-
-			//CAnnotationVPath* cykl = *edges.begin();
-
-			//std::list<INDEX_TYPE>::iterator prev = cykl->m_list.begin();
-			//std::list<INDEX_TYPE>::iterator curr = cykl->cyclicNext(prev);
-			//std::list<INDEX_TYPE>::iterator next = cykl->cyclicNext(curr);
-
-			//while (next != cykl->m_list.end())
-			//{
-
-			//	if (1) // TU WARUNEK UTWORZENIA TROJKATA !!!
-			//	{
-			//		mesh->faces().push_back(CFace(*next, *curr, *prev));
-			//	}
-
-			//	prev = next;
-			//	/*curr = cykl->cyclicNext(prev);
-			//	next = cykl->cyclicNext(curr);*/
-			//	curr = prev; curr++;
-			//	next = curr; next++;
-
-			//}
-
-			//CPoint3f pt = mesh->vertices()[(*edges.begin())->m_list.front()];
-
-			//std::vector<INDEX_TYPE> found = mesh->getKDtree(CPointCloud::KDtree::PRESERVE).find_k_closest_to_pt(10, pt, 1.0f);
-
-			//CAnnotationVPath* test = new CAnnotationVPath();
-
-			//for (auto i : found)
-			//{
-			//	test->m_list.push_back(i);
-			//}
-			//AP::MODEL::addAnnotation(obj,test);
-		}
-
-		for (auto p : edges)
-		{
-			AP::MODEL::addAnnotation(obj, p);
-		}
-
-
-
-		//if (edges.size() > 1)
-		//{
-		//	//szukam dwóch najdłuższych
-		//	CAnnotationVPath* cykl1 = nullptr;
-		//	CAnnotationVPath* cykl2;
-
-
-		//	for (auto c : edges)
-		//	{
-		//		if ((cykl1 == nullptr) || (c->size() > cykl1->size()))
-		//		{
-		//			cykl2 = cykl1;
-		//			cykl1 = c;
-		//		}
-		//		else if ((cykl2 == nullptr) || (c->size() > cykl2->size()))
-		//		{
-		//			cykl2 = c;
-		//		}
-		//	}
-
-		//	//próbuje kleić:
-
-		//	zaklejNajbliższe(mesh, cykl1, cykl2);
-
-		//}
-
-//		for (auto p : edges) delete p;
-		edges.clear();
-
-
-		UI::STATUSBAR::setText("DONE !");
-	}
-	else if (0 == name.compare(L"krok16"))
-	{
-//		UI::PLUGINPANEL::removeWidget(m_ID, L"krok16");
-
-		std::shared_ptr<CModel3D> obj = AP::WORKSPACE::getCurrentModel();
-
-		if ((NULL == obj) || !obj->getChild()->hasType(CObject::MESH)) return;
-
-
-		std::shared_ptr<CMesh> mesh = std::dynamic_pointer_cast<CMesh>(obj->getChild());
-		MapOfNewEdges allEdges;
-		
-		createE2Fmap(mesh, allEdges);
-
-		MapOfNewEdges boundaryEdges;
-
-		std::set<unsigned int> facesToRemove;
-
-		for ( const auto& e : allEdges )
-		{
-			if (e.second.size() > 2)
-			{
-				UI::MESSAGEBOX::warning(L"wiecej niz dwie scianki na krawędzi!!!");
-				AP::MODEL::addAnnotation(obj, std::make_shared<CAnnotationPoint>(mesh->vertices()[e.first.first]));
-				AP::MODEL::addAnnotation(obj, std::make_shared<CAnnotationPoint>(mesh->vertices()[e.first.second]));
-
-				facesToRemove.insert(e.second.begin(), e.second.end());
-			}
-				
-			if ( NewEdge(e).isBoundary() )
-				boundaryEdges.insert(e);
-		}
-
-
-		std::vector<std::shared_ptr<MapOfNewEdges>> cykle;
-
-		while (!boundaryEdges.empty())
-		{
-			//UI::STATUSBAR::printfTimed(500, L"zostało %ld", boundaryEdges.size());
-			UI::STATUSBAR::printf(L"zostało %ld", boundaryEdges.size());
-			std::shared_ptr<CAnnotationEdges> pts2 = std::make_shared<CAnnotationEdges>();
-
-			auto nowyCykl = std::make_shared<MapOfNewEdges>();
-
-			MapOfNewEdges::iterator ie = boundaryEdges.begin();
-			
-			NewEdge firstEdge(*ie);
-			NewEdge currentEdge(*ie);
-			NewEdge previousEdge; // should be invalid
-
-			bool koniecCyklu = false;
-			do
-			{
-				UI::STATUSBAR::printfTimed(500, L"zostało %ld, nowa krawedz: %d", boundaryEdges.size(), pts2->m_list.size() );
-
-				boundaryEdges.erase(ie);
-
-				if ((pts2->m_list.size() > 2) && firstEdge.hasOneOfVertices(currentEdge.v1(), currentEdge.v2()))
-				{
-					koniecCyklu = true; // cykl sie domknął
-				}
-				else
-				{
-					ie = boundaryEdges.findAnyOfVertices(currentEdge.v1(), currentEdge.v2());
-
-					if (ie == boundaryEdges.end())
-					{
-						koniecCyklu = true; // koniec danych i nie znaleziono cyklu (błąd?)
-					}
-					else
-					{
-						if ( previousEdge.isInvalid() ) // current == first
-						{
-							if (NewEdge(*ie).hasVertex(currentEdge.v1()))
-							{
-								currentEdge.invert();
-							}
-						}
-
-						previousEdge = currentEdge;
-						currentEdge = NewEdge(*ie);
-
-					}
-				}
-
-				nowyCykl->insert(previousEdge);
-
-				pts2->addEdge(mesh->vertices()[previousEdge.v1()], mesh->vertices()[previousEdge.v2()]);
-
-				if (previousEdge.v2() == currentEdge.v2())
-				{
-					currentEdge.invert();  // bo ma być: p.v2 == c.v1
-				}
-
-			} while ( ! koniecCyklu );
-
-			AP::MODEL::addAnnotation(obj, pts2);
-			cykle.push_back(nowyCykl);
-		}
-
-
-		if (cykle.size() > 1)
-		{
-			//szukam dwóch najdłuższych
-			std::shared_ptr<MapOfNewEdges> cykl1 = nullptr;
-			std::shared_ptr<MapOfNewEdges> cykl2;
-
-
-			for (auto c : cykle)
-			{
-				if ((cykl1 == nullptr) || (c->size() > cykl1->size()))
-				{
-					cykl2 = cykl1;
-					cykl1 = c;
-				}
-			}
-
-			//próbuje kleić:
-
-			zaklejNajblizsze(mesh, cykl1.get(), cykl2.get());
-		}
-
-		
-		UI::STATUSBAR::printf(L"ZROBIONE. Liczba cykli: %d", cykle.size());
-	}
-	else if (0 == name.compare(L"dekiel01"))
-	{
-		std::list<int> sel = AP::WORKSPACE::SELECTION::getList();
-
-		if (sel.size() > 1)
-		{
-			std::list<int>::iterator isel = sel.begin();
-
-			std::shared_ptr<CModel3D> obj1 = AP::WORKSPACE::getModel(*isel);
-			isel++;
-			std::shared_ptr<CModel3D> obj2 = AP::WORKSPACE::getModel(*isel);
-
-		}
-	}
-	else if (0 == name.compare(L"krok02"))
-	{
-		UI::PLUGINPANEL::removeWidget(m_ID, L"krok11");
-		UI::PLUGINPANEL::removeWidget(m_ID, L"krok02");
-		UI::PLUGINPANEL::removeWidget(m_ID, L"label01");
-		UI::PLUGINPANEL::removeWidget(m_ID, L"label02");
-		UI::PLUGINPANEL::removeWidget(m_ID, L"label03");
-
-		symulator->generujWnetrze(symulator->wnetrze, 0.2f);
-
-		UI::DOCK::WORKSPACE::update();
-
-		UI::PLUGINPANEL::addButton(m_ID, L"wyzeruj", L"Wróć na początek", 4, 0);
-	}
-	else if (0 == name.compare(L"wyzeruj"))
-	{
-		UI::PLUGINPANEL::removeWidget(m_ID, L"wyzeruj");
-
-		CSiateczka1::close( symulator->wnetrze->obj->id(), symulator->wnetrze );
-		CSiateczka1::close( symulator->wierzch->obj->id(), symulator->wierzch );
-
-		symulator->usunZeby();
-
-		//delete symulator;
-
-		AP::WORKSPACE::setCurrentModel(-1);
-
-		CWektor3D t, v;
-
-		UI::PLUGINPANEL::addButton(m_ID, L"krok01", L"wersja z siateczką", 4, 0);
-	}
-	else
-	{
-		UI::MESSAGEBOX::warning("Nieobsłużony przycisk: " + QString::fromStdWString(name));
-	}
-
-	UI::updateAllViews();
-}
 
 bool ConcretePlugin::onModelIndication(int objId)
 {
