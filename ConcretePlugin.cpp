@@ -7,8 +7,8 @@
 
 #include "BiteSim.h"
 
-#include "HFMesh.h"
-#include "HoleFiller.h"
+//#include "HFMesh.h"
+//#include "HoleFiller.h"
 
 #include "../api/AP.h"
 #include "../api/UI.h"
@@ -20,7 +20,7 @@
 #include "IndexedTriangle.h"
 #include "KDNode.h"
 
-#include "gui/ProgressIndicator.h"
+#include "../gui/ProgressIndicator.h"
 #include "FileConnector.h"
 
 #include <omp.h>
@@ -333,7 +333,7 @@ void ConcretePlugin::etap00(double dist2, bool dane_z_pomiaru)
 		zu1->applyTransformation(tZu, tSz);
 	}
 
-	CTransform invT = mZu.inverse() * mSz;
+	CTransform invT = (Eigen::Matrix4d) (mZu.inverse() * mSz);
 
 	QCursor c = moj_widget->cursor();
 	c.setShape(Qt::CursorShape::WaitCursor);

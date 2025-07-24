@@ -3,6 +3,7 @@
 #include "Punkt3D.h"
 #include <map>
 #include <set>
+#include <memory>
 
 class CVertex;
 class CModel3D;

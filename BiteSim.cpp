@@ -37,9 +37,13 @@ void BiteSim::create_inner_surface(CSiateczka1* wnetrze, float d)
 
 	wnetrze->klejDziury3();
 
+
 	wnetrze->usunNadmiaroweScianki();
 
+	qInfo() << "TEST1";
+
 	wnetrze->odwrocNormalne();
+	qInfo() << "TEST2";
 }
 
 
