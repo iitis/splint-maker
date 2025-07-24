@@ -10,8 +10,10 @@
 #include "HFMesh.h"
 #include "HoleFiller.h"
 
-#include "../api/AP.h"
-#include "../api/UI.h"
+//#include "../api/AP.h"
+//#include "../api/UI.h"
+#include "AP.h"
+#include "UI.h"
 
 #include "AppSettings.h"
 
@@ -20,7 +22,8 @@
 #include "IndexedTriangle.h"
 #include "KDNode.h"
 
-#include "gui/ProgressIndicator.h"
+//#include "gui/ProgressIndicator.h"
+#include "ProgressIndicator.h"
 #include "FileConnector.h"
 
 #include <omp.h>
@@ -279,8 +282,10 @@ void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 			moj_widget->wybor_siatek->ustawOkluzje(oklu->getLabel());
 
 			if (szcz && zuch && oklu->hasKeyword("inv_jaw")) {
-				Eigen::Matrix4d Ms = CBaseObject::getGlobalTransformationMatrix(szcz);
-				Eigen::Matrix4d Mz = CBaseObject::getGlobalTransformationMatrix(zuch);
+				//Eigen::Matrix4d Ms = CBaseObject::getGlobalTransformationMatrix(szcz);
+				//Eigen::Matrix4d Mz = CBaseObject::getGlobalTransformationMatrix(zuch);
+				Eigen::Matrix4d Ms = szcz->getGlobalTransformationMatrix();
+				Eigen::Matrix4d Mz = zuch->getGlobalTransformationMatrix();
 				Eigen::Matrix4d M = (Mz * Ms.inverse()).inverse();
 
 
@@ -289,7 +294,8 @@ void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 				AP::OBJECT::removeChild(oklu_parent, oklu);
 
 				std::shared_ptr<CModel3D> new_oklu_parent = std::make_shared<CModel3D>();
-				new_oklu_parent->addChild(new_oklu_parent, oklu);
+				//new_oklu_parent->addChild(new_oklu_parent, oklu);
+				new_oklu_parent->addChild(oklu);
 				new_oklu_parent->setTransform(M);
 
 				AP::OBJECT::addChild(oklu_parent, new_oklu_parent);
@@ -322,9 +328,11 @@ void ConcretePlugin::etap00(double dist2, bool dane_z_pomiaru)
 	std::shared_ptr<CMesh> sz1 = std::dynamic_pointer_cast<CMesh>(szcz->getCopy());
 	std::shared_ptr<CMesh> zu1 = std::dynamic_pointer_cast<CMesh>(zuch->getCopy());
 
-	Eigen::Matrix4d mSz = CBaseObject::getGlobalTransformationMatrix(szcz);
-	Eigen::Matrix4d mZu = CBaseObject::getGlobalTransformationMatrix(zuch);
-	
+	//Eigen::Matrix4d mSz = CBaseObject::getGlobalTransformationMatrix(szcz);
+	//Eigen::Matrix4d mZu = CBaseObject::getGlobalTransformationMatrix(zuch);
+	Eigen::Matrix4d mSz = szcz->getGlobalTransformationMatrix();
+	Eigen::Matrix4d mZu = zuch->getGlobalTransformationMatrix();
+
 	CTransform tSz(mSz);
 	CTransform tZu(mZu);
 
@@ -349,7 +357,8 @@ void ConcretePlugin::etap00(double dist2, bool dane_z_pomiaru)
 	if (dane_z_pomiaru)
 	{
 		std::shared_ptr<CModel3D> obj = std::make_shared<CModel3D>();
-		obj->addChild(obj, oklu);
+		//obj->addChild(obj, oklu);
+		obj->addChild(oklu);
 		obj->importChildrenGeometry();
 		obj->setLabel("inv");
 		obj->setTransform(invT);
@@ -369,7 +378,8 @@ void ConcretePlugin::etap00(double dist2, bool dane_z_pomiaru)
 		}
 		else {
 			auto obj = std::make_shared<CModel3D>();
-			obj->addChild(obj, oklu);
+			//obj->addChild(obj, oklu);
+			obj->addChild(oklu);
 			obj->importChildrenGeometry();
 			obj->setLabel("ROBOCZE");
 			obj->setTransform(mZu);
@@ -416,12 +426,15 @@ void ConcretePlugin::etap01(int div)
 
 	symulator->szczeka_inicjuj2(szcz);
 
-	symulator->szczeka_obj->transform() = CBaseObject::getGlobalTransformationMatrix(szcz);
+	//symulator->szczeka_obj->transform() = CBaseObject::getGlobalTransformationMatrix(szcz);
+	symulator->szczeka_obj->transform() = szcz->getGlobalTransformationMatrix();
 	symulator->szczeka_obj->applyTransform();
 
-	Eigen::Matrix4d mSz = CBaseObject::getGlobalTransformationMatrix(szcz);
-	Eigen::Matrix4d mOk = CBaseObject::getGlobalTransformationMatrix(oklu);
-	
+	//Eigen::Matrix4d mSz = CBaseObject::getGlobalTransformationMatrix(szcz);
+	//Eigen::Matrix4d mOk = CBaseObject::getGlobalTransformationMatrix(oklu);
+	Eigen::Matrix4d mSz = szcz->getGlobalTransformationMatrix();
+	Eigen::Matrix4d mOk = oklu->getGlobalTransformationMatrix();
+
 	//std::cout << mSz << endl;
 	//std::cout << mOk << endl;
 
@@ -691,9 +704,11 @@ void ConcretePlugin::etap13_v2(double dVal)
 
 	std::shared_ptr<CMesh> zu = std::dynamic_pointer_cast<CMesh>(zuch->getCopy());
 
-	Eigen::Matrix4d ms = CBaseObject::getGlobalTransformationMatrix(szcz_parent);
-	Eigen::Matrix4d mz = CBaseObject::getGlobalTransformationMatrix(zuch);
-	
+	//Eigen::Matrix4d ms = CBaseObject::getGlobalTransformationMatrix(szcz_parent);
+	//Eigen::Matrix4d mz = CBaseObject::getGlobalTransformationMatrix(zuch);
+	Eigen::Matrix4d ms = szcz_parent->getGlobalTransformationMatrix();
+	Eigen::Matrix4d mz = zuch->getGlobalTransformationMatrix();
+
 	//UWAGA to moze byc potrzebny wybór ms lub mz w zależności od położenia źródłowej żuchwy
 	Eigen::Matrix4d mm = ms;// mz;
 
@@ -779,12 +794,14 @@ void decapitation(std::shared_ptr<CBaseObject> victim, std::shared_ptr<CAnnotati
 	CPoint3d p1 = p.m_center;
 	CPoint3d p2 = p1 + p.m_normal;
 
-	Eigen::Matrix4d T0 = CBaseObject::getGlobalTransformationMatrix(guillotine);
+	//Eigen::Matrix4d T0 = CBaseObject::getGlobalTransformationMatrix(guillotine);
+	Eigen::Matrix4d T0 = guillotine->getGlobalTransformationMatrix();
 
 	p1 = T0 * p1; // do wsp. workspace
 	p2 = T0 * p2;
 
-	Eigen::Matrix4d T1 = CBaseObject::getGlobalTransformationMatrix(victim);
+	//Eigen::Matrix4d T1 = CBaseObject::getGlobalTransformationMatrix(victim);
+	Eigen::Matrix4d T1 = victim->getGlobalTransformationMatrix();
 	Eigen::Matrix4d T1inv = T1.inverse();
 
 	p1 = T1inv * p1; // do wsp. szczeka_obj
@@ -950,7 +967,8 @@ void ConcretePlugin::go_to_exchange()
 
 void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 {
-	Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(m);
+	//Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(m);
+	Eigen::Matrix4d M = m->getGlobalTransformationMatrix();
 	std::shared_ptr<CMesh> mesh = std::dynamic_pointer_cast<CMesh>(m->getCopy());
 
 	CTransform t0, t1(M);
@@ -964,7 +982,8 @@ void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 
 	obj->setLabel(label);
 
-	obj->addChild(obj, mesh);
+	//obj->addChild(obj, mesh);
+	obj->addChild(mesh);
 
 	obj->save(path);
 
@@ -1147,7 +1166,8 @@ void ConcretePlugin::etap_zapisz_wynik()
 		}
 		else {
 			CTransform nullT;
-			CTransform szT(CBaseObject::getGlobalTransformationMatrix(szcz).inverse());
+			//CTransform szT(CBaseObject::getGlobalTransformationMatrix(szcz).inverse());
+			CTransform szT(szcz->getGlobalTransformationMatrix().inverse());
 
 			calosc->applyTransformation(szT, nullT);
 			mesh_wierzch->applyTransformation(szT, nullT);
@@ -1255,7 +1275,8 @@ void ConcretePlugin::showMainPanel()
 			c.setShape(Qt::CursorShape::WaitCursor);
 			moj_widget->setCursor(c);
 
-			CTransform tSz(CBaseObject::getGlobalTransformationMatrix(szcz));
+			//CTransform tSz(CBaseObject::getGlobalTransformationMatrix(szcz));
+			CTransform tSz(szcz->getGlobalTransformationMatrix());
 			std::shared_ptr<CMesh> sz1 = std::dynamic_pointer_cast<CMesh>(szcz->getCopy());
 			std::shared_ptr<CMesh> sz2 = liczOkluzje(sz1, oklu, moj_widget->przytnij_szczene->insideDist->value());
 			sz2->setLabel(QString("szczeka po przycieciu"));
@@ -1360,7 +1381,8 @@ std::shared_ptr<CMesh> ConcretePlugin::zrzutujNaPlaszczyzne(std::shared_ptr<CMes
 std::shared_ptr<CModel3D> ConcretePlugin::dodajMeshDoProjektu(std::shared_ptr<CMesh>  mesh, QString label)
 {
 	auto nowyModel = std::make_shared<CModel3D>();
-	nowyModel->addChild(nowyModel, mesh);
+	//nowyModel->addChild(nowyModel, mesh);
+	nowyModel->addChild(mesh);
 	nowyModel->setMin(mesh->getMin());
 	nowyModel->setMax(mesh->getMax());
 

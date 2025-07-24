@@ -148,7 +148,7 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="ConcretePlugin.h" />
-    <QtMoc Include="..\..\dpVision\src\gui\ProgressIndicator.h" />
+    <QtMoc Include="..\..\dpVision\src\core\ProgressIndicator.h" />
     <ClInclude Include="CollisionDetector.h" />
     <ClInclude Include="CollisionDetector_definitions.h" />
     <QtMoc Include="moje_widgety.h" />
@@ -170,7 +170,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <QtUic Include="..\..\dpVision\src\gui\ProgressIndicator.ui" />
+    <QtUic Include="..\..\dpVision\src\core\ProgressIndicator.ui" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

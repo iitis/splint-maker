@@ -1,7 +1,8 @@
 #include "BiteSim.h"
 #include "AnnotationEdges.h"
 
-#include "../api/UI.h"
+//#include "../api/UI.h"
+#include "UI.h"
 
 void BiteSim::create_inner_surface(CSiateczka1* wnetrze, float d)
 {
@@ -230,7 +231,8 @@ void BiteSim::szczeka_inicjuj2(std::shared_ptr<CMesh> mesh)
 	m->setLabel("szczeka_mesh");
 
 	szczeka_obj = std::make_shared<CModel3D>();
-	szczeka_obj->addChild(szczeka_obj, m);
+	//szczeka_obj->addChild(szczeka_obj, m);
+	szczeka_obj->addChild(m);
 	szczeka_obj->importChildrenGeometry();
 	szczeka_obj->setLabel("SZCZEKA");
 
@@ -253,7 +255,8 @@ void BiteSim::szczeka_wytnijZebyNEW(std::shared_ptr<CPlane> cutPlane)
 	robo->cutPlane(*cutPlane);
 
 	szczeka_zeby = std::make_shared<CModel3D>();
-	szczeka_zeby->addChild(szczeka_zeby, robo);
+	//szczeka_zeby->addChild(szczeka_zeby, robo);
+	szczeka_zeby->addChild(robo);
 	szczeka_zeby->setName(L"---zęby---");
 	szczeka_zeby->setMin(robo->getMin());
 	szczeka_zeby->setMax(robo->getMax());
@@ -268,7 +271,8 @@ void BiteSim::szczeka_tworzMapeOkluzji2(std::shared_ptr<CMesh> mesh, CTransform 
 	o->setLabel("okluzja_mesh2");
 
 	szczeka_okluzja = std::make_shared<CModel3D>();
-	szczeka_okluzja->addChild(szczeka_okluzja, o);
+	//szczeka_okluzja->addChild(szczeka_okluzja, o);
+	szczeka_okluzja->addChild(o);
 	szczeka_okluzja->importChildrenGeometry();
 	szczeka_okluzja->setLabel("OKLUZJA");
 	szczeka_okluzja->applyTransformation(tFrom, tTo);

@@ -4,8 +4,10 @@
 #include "KDNode2.h"
 #include "AnnotationPoint.h"
 
-#include "../api/AP.h"
-#include "../api/UI.h"
+//#include "../api/AP.h"
+//#include "../api/UI.h"
+#include "AP.h"
+#include "UI.h"
 
 void CSiateczka1::close(int id, CSiateczka1 *s)
 {
@@ -19,7 +21,8 @@ CSiateczka1::CSiateczka1( unsigned int sizeXmm , unsigned int sizeYmm, unsigned 
 {
 	obj = std::make_shared<CModel3D>();
 
-	obj->addChild(obj, std::make_shared<CMesh>());
+	//obj->addChild(obj, std::make_shared<CMesh>());
+	obj->addChild(std::make_shared<CMesh>());
 
 	int tmpX = (sizeXmm+1) / 2;
 	if ( tmpX % 2) tmpX++;

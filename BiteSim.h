@@ -1,7 +1,8 @@
 #pragma once
 
 #include "Workspace.h"
-#include "../api/AP.h"
+//#include "../api/AP.h"
+#include "AP.h"
 
 #include "Siateczka1.h"
 
