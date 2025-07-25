@@ -23,6 +23,10 @@
 #include "../gui/ProgressIndicator.h"
 #include "FileConnector.h"
 
+//#include "interfaces/IProgressListener.h"
+
+#include <memory>
+
 #include <omp.h>
 
 //#define UseICP
@@ -617,75 +621,29 @@ void ConcretePlugin::etap11()
 	
 	UI::updateAllViews();
 
-	moj_widget->etap12 = new WidgetEtap12();
-	moj_layout->addRow(moj_widget->etap12);
+	moj_widget->etap123 = new WidgetEtap123();
+	moj_layout->addRow(moj_widget->etap123);
 
-	QObject::connect(moj_widget->etap12->btStart, &QPushButton::clicked, [&]() { etap12(moj_widget->etap12->insideDist->value()); });
+	QObject::connect(moj_widget->etap123->btStart23, &QPushButton::clicked, [&]() { etap123(moj_widget->etap123->insideDist->value(), moj_widget->etap123->outsideDist->value()); });
 
 	c.setShape(Qt::CursorShape::ArrowCursor);
 	moj_widget->setCursor(c);
 }
 
-void ConcretePlugin::etap12(double dVal)
+void ConcretePlugin::etap123(double dValIn, double dValOut)
 {
-	moj_widget->etap12->setDisabled(true);
+	moj_widget->etap11->setDisabled(true);
+	moj_widget->etap123->setDisabled(true);
 
 	QCursor c = moj_widget->cursor();
 	c.setShape(Qt::CursorShape::WaitCursor);
 	moj_widget->setCursor(c);
-
-	//m_rzutnia_copy = new CAnnotationPlane(*m_rzutnia);
 
 	qInfo() << "etap12 -> symulator->generujWnetrzeNEW()";
 
-	symulator->create_inner_surface(symulator->wnetrze, dVal);
+	symulator->create_inner_surface(symulator->wnetrze, dValIn);
 	mesh_wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
 
-
-	UI::DOCK::WORKSPACE::update();
-
-	moj_widget->etap13 = new WidgetEtap13();
-	moj_layout->addRow(moj_widget->etap13);
-
-	//QObject::connect(moj_widget->etap13->btStart, &QPushButton::clicked, [&]() { etap13(moj_widget->etap13->outsideDist->value()); });
-	QObject::connect(moj_widget->etap13->btStart2, &QPushButton::clicked, [&]() { etap13_v2(moj_widget->etap13->outsideDist->value()); });
-	//QObject::connect(moj_widget->etap13->btStart3, &QPushButton::clicked, [&]() { odcisk_stepla(); });
-
-	c.setShape(Qt::CursorShape::ArrowCursor);
-	moj_widget->setCursor(c);
-}
-
-//
-//void ConcretePlugin::odcisk_stepla()
-//{
-//	qInfo() << "odcisk stempla";
-//	std::list<std::shared_ptr<CBaseObject>> sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
-//
-//	if (sel.size() > 0)
-//	{
-//		std::list<std::shared_ptr<CBaseObject>>::iterator isel = sel.begin();
-//
-//		//std::shared_ptr<CMesh>  wierzch1 = ((CMesh*)(*isel))->getCopy();
-//		//wierzch1->setParent(nullptr);
-//		//isel++;
-//		std::shared_ptr<CMesh> stempel = std::dynamic_pointer_cast<CMesh>(*isel);
-//		
-//		symulator->wierzch->zrobWyciskZuchwy_v1(std::dynamic_pointer_cast<CModel3D>(stempel->getParentPtr()), 0.0, 1);
-//
-//		symulator->wierzch->klejDziury3();
-//		symulator->wierzch->usunNadmiaroweScianki();
-//
-//	}
-//}
-//
-
-void ConcretePlugin::etap13_v2(double dVal)
-{
-	//moj_widget->etap13->setDisabled(true);
-
-	QCursor c = moj_widget->cursor();
-	c.setShape(Qt::CursorShape::WaitCursor);
-	moj_widget->setCursor(c);
 
 	qInfo() << "etap13 - wersja 2";
 
@@ -700,7 +658,7 @@ void ConcretePlugin::etap13_v2(double dVal)
 	AP::WORKSPACE::addObject(zu);
 	((CModel3D*)zu->getParent())->transform() = mm;
 
-	symulator->create_outer_surface(dVal, zu);
+	symulator->create_outer_surface(dValOut, zu);
 	
 	mesh_wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
 
@@ -708,65 +666,159 @@ void ConcretePlugin::etap13_v2(double dVal)
 
 	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
 
-	m_cutPlane->setSelfVisibility(true);
-	UI::updateAllViews();
+	// m_cutPlane->setSelfVisibility(true);
+	// UI::updateAllViews();
 
-	moj_widget->etap14 = new WidgetInfo({ QString::fromUtf8("Możesz teraz jeszcze skorygować ustawienie płaszczyzny cięcia. Następnie kliknij przycisk \"Dotnj\".") });
-	moj_widget->etap14->btStart->setText("Dotnij");
+	// moj_widget->etap14 = new WidgetInfo({ QString::fromUtf8("Możesz teraz jeszcze skorygować ustawienie płaszczyzny cięcia. Następnie kliknij przycisk \"Dotnj\".") });
+	// moj_widget->etap14->btStart->setText("Dotnij");
 
-	moj_layout->addRow(moj_widget->etap14);
+	// moj_layout->addRow(moj_widget->etap14);
 
-	QObject::connect(moj_widget->etap14->btStart, &QPushButton::clicked, [&]() { etap14(); });
+	// QObject::connect(moj_widget->etap14->btStart, &QPushButton::clicked, [&]() { etap14(); });
+
+	etap14();
+
+
+	UI::STATUSBAR::setText(L"Prawdopodobnie gotowe !");
+
+	moj_widget->info_zapis = new WidgetInfo({
+		QString::fromUtf8("W tym miejscu mozesz sobie zapisać ważniejsze siatki."),
+		// QString::fromUtf8("coś tu więcej napiszę jesli to będzie działało..."),
+		});
+	moj_widget->info_zapis->btStart->setText("ZAPISZ");
+
+	moj_layout->addRow(moj_widget->info_zapis);
+
+	QObject::connect(moj_widget->info_zapis->btStart, &QPushButton::clicked, [&]() {
+		go_to_multisaver();
+		});
+
+
+	moj_widget->info_koncowe = new WidgetInfo({
+		QString::fromUtf8("Zrobione."),
+		// QString::fromUtf8("Szyna powinna być widoczna w oknie po lewej pod nazwą \"całość\"."),
+		QString::fromUtf8("Niestety aby znów skorzystać z wtyczki musisz uruchomić program ponownie."),
+		QString::fromUtf8("It's not a bug, it's the feature..."),
+		});
+	moj_widget->info_koncowe->btStart->setText("KONIEC");
+
+	moj_layout->addRow(moj_widget->info_koncowe);
+
+	QObject::connect(moj_widget->info_koncowe->btStart, &QPushButton::clicked, [&]() { wytlaczanie(); });
+
 
 	c.setShape(Qt::CursorShape::ArrowCursor);
 	moj_widget->setCursor(c);
 }
 
-//
-//void ConcretePlugin::etap13(double dVal)
-//{
-//	moj_widget->etap13->setDisabled(true);
-//
-//	QCursor c = moj_widget->cursor();
-//	c.setShape(Qt::CursorShape::WaitCursor);
-//	moj_widget->setCursor(c);
-//
-//	qInfo() << "etap13 - symulator->generujWierzchOdRazu2()";
-//
-//	std::shared_ptr<CMesh> zu = std::dynamic_pointer_cast<CMesh>(zuch->getCopy());
-//
-//	Eigen::Matrix4d ms = CBaseObject::getGlobalTransformationMatrix(szcz_parent);
-//	Eigen::Matrix4d mz = CBaseObject::getGlobalTransformationMatrix(zuch);
-//
-//	//UWAGA to moze byc potrzebny wybór ms lub mz w zależności od położenia źródłowej żuchwy
-//	Eigen::Matrix4d mm = ms;// mz;
-//
-//	AP::WORKSPACE::addObject(zu);
-//	((CModel3D*)zu->getParent())->transform() = mm;
-//
-//	//symulator->generujWierzchOdRazu3(dVal, zu);
-//	symulator->generujWierzchOdRazu3_CSiateczka1(dVal, zu);
-//
-//	mesh_wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
-//
-//	UI::DOCK::WORKSPACE::update();
-//
-//	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
-//
-//	m_cutPlane->setSelfVisibility(true);
-//	UI::updateAllViews();
-//
-//	moj_widget->etap14 = new WidgetInfo({ QString::fromUtf8("Możesz teraz jeszcze skorygować ustawienie płaszczyzny cięcia. Następnie kliknij przycisk \"Dotnj\".") });
-//	moj_widget->etap14->btStart->setText("Dotnij");
-//
-//	moj_layout->addRow(moj_widget->etap14);
-//
-//	QObject::connect(moj_widget->etap14->btStart, &QPushButton::clicked, [&]() { etap14(); });
-//
-//	c.setShape(Qt::CursorShape::ArrowCursor);
-//	moj_widget->setCursor(c);
-//}
-//
+void ConcretePlugin::wytlaczanie()
+{
+	CObject::Children kids;
+
+	moj_widget->info_koncowe->setDisabled(true);
+
+	for (const auto& kid : CWorkspace::instance()->children())
+	{
+		kids[kid.first] = kid.second;
+	}
+
+	std::shared_ptr<CMesh> sz, ok, zu, wi, wn;
+
+	auto tmp = meshWithKeywordInLabel(QString("wierzch_mesh"), kids);
+	if (tmp) {
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
+		CTransform t0, t1(M);
+		tmp->applyTransformation(t1, t0);
+		wi = tmp;
+		wi->setLabel("wierzch");
+	}
+
+	tmp = meshWithKeywordInLabel(QString("wnetrze_mesh"), kids);
+	if (tmp) {
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
+		CTransform t0, t1(M);
+		tmp->applyTransformation(t1, t0);
+		wn = tmp;
+		wn->setLabel("wnetrze");
+	}
+
+	tmp = meshWithKeywordInLabel(QString("testowa zuchwa"), kids);
+	if (tmp) {
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
+		CTransform t0, t1(M);
+		tmp->applyTransformation(t1, t0);
+		zu = tmp;
+		zu->setLabel("zuchwa");
+	}
+
+	tmp = meshWithKeywordInLabel(QString("szczeka_mesh"), kids);
+	if (tmp)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
+		CTransform t0, t1(M);
+		tmp->applyTransformation(t1, t0);
+		sz = tmp;
+		sz->setLabel("szczeka");
+	}
+
+	tmp = meshWithKeywordInLabel(QString("okluzja_mesh"), kids);
+	if (tmp)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
+		CTransform t0, t1(M);
+		tmp->applyTransformation(t1, t0);
+		ok = tmp;
+		ok->setLabel("okluzja");
+	}
+
+	AP::WORKSPACE::removeAllModels();
+
+	CWorkspace::instance()->_objectAdd(sz); sz->getParentPtr()->setLabel(sz->getLabel());
+	CWorkspace::instance()->_objectAdd(ok); ok->getParentPtr()->setLabel(ok->getLabel());
+	CWorkspace::instance()->_objectAdd(zu); zu->getParentPtr()->setLabel(zu->getLabel());
+	CWorkspace::instance()->_objectAdd(wi); wi->getParentPtr()->setLabel(wi->getLabel());
+	CWorkspace::instance()->_objectAdd(wn); wn->getParentPtr()->setLabel(wn->getLabel());
+	
+	UI::DOCK::WORKSPACE::update();
+
+	qInfo() << "budowa stempla";
+
+	auto stmp = stempelOnMesh(ok);
+	
+
+	qInfo() << "odcisk stempla";
+
+	zrobOdciskStempla(wi, stmp, 0.0);
+
+	qInfo() << "odcisk zuchwy";
+
+	zrobOdciskStempla(wi, zu, 0.2);
+
+	qInfo() << "dziury";
+	auto [wi2, wn2] = zrobDziury(wi, wn);
+
+	qInfo() << "bridging";
+	if (auto bridged = bridging(wi2, wn2)) {
+		qInfo() << "filling";
+		if (auto filled = filling(bridged)) {
+			filled->setLabel("szyna");
+			CWorkspace::instance()->_objectAdd(filled);
+			filled->getParentPtr()->setLabel("szyna");
+
+			UI::DOCK::WORKSPACE::update();
+
+			qInfo() << "looks good!!!";
+		}
+	}
+	qInfo() << "that's all folks...";
+}
+
+
 
 #include "AnnotationPoints.h"
 
@@ -835,11 +887,14 @@ void decapitation(std::shared_ptr<CBaseObject> victim, std::shared_ptr<CAnnotati
 
 void ConcretePlugin::etap14()
 {
-	moj_widget->etap14->setDisabled(true);
+	//moj_widget->etap14->setDisabled(true);
 
-	QCursor c = moj_widget->cursor();
-	c.setShape(Qt::CursorShape::WaitCursor);
-	moj_widget->setCursor(c);
+	//QCursor c = moj_widget->cursor();
+	//c.setShape(Qt::CursorShape::WaitCursor);
+	//moj_widget->setCursor(c);
+
+	qInfo() << "TEST4";
+
 
 	symulator->wierzch->obj->applyTransform();
 
@@ -878,32 +933,32 @@ void ConcretePlugin::etap14()
 	UI::DOCK::WORKSPACE::update();
 
 
-	moj_widget->info_exchange = new WidgetInfo({
-	QString::fromUtf8("W tym miejscu powinno sie dać podmienić siatkę reprezentująca wierzch na inną..."),
-	QString::fromUtf8("Zaznacz checkbox przy siatce (Mesh) która chcesz wstawić do projektu i kliknij:"),
-		});
-	moj_widget->info_exchange->btStart->setText("EXCHANGE");
+	// moj_widget->info_exchange = new WidgetInfo({
+	// QString::fromUtf8("W tym miejscu powinno sie dać podmienić siatkę reprezentująca wierzch na inną..."),
+	// QString::fromUtf8("Zaznacz checkbox przy siatce (Mesh) która chcesz wstawić do projektu i kliknij:"),
+	// 	});
+	// moj_widget->info_exchange->btStart->setText("EXCHANGE");
 
-	moj_layout->addRow(moj_widget->info_exchange);
+	// moj_layout->addRow(moj_widget->info_exchange);
 
-	QObject::connect(moj_widget->info_exchange->btStart, &QPushButton::clicked, [&]() {
-		go_to_exchange();
-		});
+	// QObject::connect(moj_widget->info_exchange->btStart, &QPushButton::clicked, [&]() {
+	// 	go_to_exchange();
+	// 	});
 
 
-	moj_widget->etap15 = new WidgetInfo({
-		QString::fromUtf8("Program podejmie próbę połączenia powierzchni wewnętrznej i zewnętrznej szyny, tworząc \"wodoszczelną\" siatkę."), 
-		QString::fromUtf8("Ten etap jest jeszcze w fazie testowej i nie zawsze efekt jest zadowalający."),
-		QString::fromUtf8("Może być potrzebne użycie zewnętrznego oprogramowania w celu uzyskania poprawnej siatki.")
-		});
-	moj_widget->etap15->btStart->setText("Połącz w szynę");
+	// moj_widget->etap15 = new WidgetInfo({
+	// 	QString::fromUtf8("Program podejmie próbę połączenia powierzchni wewnętrznej i zewnętrznej szyny, tworząc \"wodoszczelną\" siatkę."), 
+	// 	QString::fromUtf8("Ten etap jest jeszcze w fazie testowej i nie zawsze efekt jest zadowalający."),
+	// 	QString::fromUtf8("Może być potrzebne użycie zewnętrznego oprogramowania w celu uzyskania poprawnej siatki.")
+	// 	});
+	// moj_widget->etap15->btStart->setText("Połącz w szynę");
 
-	moj_layout->addRow(moj_widget->etap15);
+	// moj_layout->addRow(moj_widget->etap15);
 
-	QObject::connect(moj_widget->etap15->btStart, &QPushButton::clicked, [&]() { etap_dekiel_cien(); });
+	// QObject::connect(moj_widget->etap15->btStart, &QPushButton::clicked, [&]() { etap_dekiel_cien(); });
 
-	c.setShape(Qt::CursorShape::ArrowCursor);
-	moj_widget->setCursor(c);
+	// c.setShape(Qt::CursorShape::ArrowCursor);
+	// moj_widget->setCursor(c);
 }
 
 
@@ -977,7 +1032,7 @@ void ConcretePlugin::go_to_multisaver()
 
 	QFileInfo fi(AppSettings::mainSettings()->value("recentFile").toString());
 
-	QString init_path = QString("%1\\calosc.obj").arg(fi.absoluteDir().absolutePath());
+	QString init_path = QString("%1/calosc.obj").arg(fi.absoluteDir().absolutePath());
 
 	QString splint_path = UI::FILECHOOSER::getSaveFileName(QString("Wybierz plik zapisu szyny"), init_path, "OBJ File (*.obj)"); // CFileConnector::getSaveExts());
 
@@ -1000,75 +1055,61 @@ void ConcretePlugin::go_to_multisaver()
 		kids[kid.first] = kid.second;
 	}
 
-	std::shared_ptr<CMesh>  tmp = meshWithKeywordInLabel("szyna_mesh", kids);
+	// std::shared_ptr<CMesh>  tmp = meshWithKeywordInLabel("szyna_mesh", kids);
+	// if (tmp != nullptr)
+	// {
+	// 	qInfo() << "Znaleziono: " << tmp->getLabel();
+	// 	save_mesh(tmp, "calosc", splint_path);
+	// 	AppSettings::mainSettings()->setValue("recentFile", splint_path);
+	// }
+
+	auto tmp = meshWithKeywordInLabel(QString("wierzch_mesh"), kids);
 	if (tmp != nullptr)
 	{
 		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "calosc", splint_path);
-		AppSettings::mainSettings()->setValue("recentFile", splint_path);
+		save_mesh(tmp, "wierzch", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wierzch").arg(splint_info.completeSuffix()));
 	}
 
-	tmp = meshWithKeywordInLabel(QString("wierzch_mesh"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "wierzch", QString("%1\\%2.%3").arg(dir.absolutePath()).arg("wierzch").arg(splint_info.completeSuffix()));
-	}
+	// tmp = meshWithKeywordInLabel(QString("wierzchBD_mesh"), kids);
+	// if (tmp != nullptr)
+	// {
+	// 	qInfo() << "Znaleziono: " << tmp->getLabel();
+	// 	save_mesh(tmp, "wierzch_bez_okluzji", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wierzch_bez_okluzji").arg(splint_info.completeSuffix()));
+	// }
 
-	tmp = meshWithKeywordInLabel(QString("wierzchBD_mesh"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "wierzch_bez_okluzji", QString("%1\\%2.%3").arg(dir.absolutePath()).arg("wierzch_bez_okluzji").arg(splint_info.completeSuffix()));
-	}
-
-	tmp = meshWithKeywordInLabel(QString("wierzchZD_mesh"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "wierzch_dziurawy", QString("%1\\%2.%3").arg(dir.absolutePath()).arg("wierzch_dziurawy").arg(splint_info.completeSuffix()));
-	}
+	// tmp = meshWithKeywordInLabel(QString("wierzchZD_mesh"), kids);
+	// if (tmp != nullptr)
+	// {
+	// 	qInfo() << "Znaleziono: " << tmp->getLabel();
+	// 	save_mesh(tmp, "wierzch_dziurawy", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wierzch_dziurawy").arg(splint_info.completeSuffix()));
+	// }
 
 	tmp = meshWithKeywordInLabel(QString("wnetrze_mesh"), kids);
 	if (tmp != nullptr)
 	{
 		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "wnetrze", QString("%1\\%2.%3").arg(dir.absolutePath()).arg("wnetrze").arg(splint_info.completeSuffix()));
-	}
-
-	tmp = meshWithKeywordInLabel(QString("rozepch1"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, tmp->getParent()->getLabel(), QString("%1\\%2.%3").arg(dir.absolutePath()).arg(tmp->getParent()->getLabel()).arg(splint_info.completeSuffix()));
-	}
-
-	tmp = meshWithKeywordInLabel(QString("rozepch2"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, tmp->getParent()->getLabel(), QString("%1\\%2.%3").arg(dir.absolutePath()).arg(tmp->getParent()->getLabel()).arg(splint_info.completeSuffix()));
+		save_mesh(tmp, "wnetrze", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wnetrze").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("testowa zuchwa"), kids);
 	if (tmp != nullptr)
 	{
 		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "zuchwa", QString("%1\\%2.%3").arg(dir.absolutePath()).arg("zuchwa").arg(splint_info.completeSuffix()));
+		save_mesh(tmp, "zuchwa", QString("%1/%2.%3").arg(dir.absolutePath()).arg("zuchwa").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("szczeka_mesh"), kids);
 	if (tmp != nullptr)
 	{
 		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "szczeka", QString("%1\\%2.%3").arg(dir.absolutePath()).arg("szczeka").arg(splint_info.completeSuffix()));
+		save_mesh(tmp, "szczeka", QString("%1/%2.%3").arg(dir.absolutePath()).arg("szczeka").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("okluzja_mesh"), kids);
 	if (tmp != nullptr)
 	{
 		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "okluzja", QString("%1\\%2.%3").arg(dir.absolutePath()).arg("okluzja").arg(splint_info.completeSuffix()));
+		save_mesh(tmp, "okluzja", QString("%1/%2.%3").arg(dir.absolutePath()).arg("okluzja").arg(splint_info.completeSuffix()));
 	}
 
 	//delete parser;
@@ -1077,56 +1118,56 @@ void ConcretePlugin::go_to_multisaver()
 	UI::STATUSBAR::setText(QString::fromUtf8("ZAPISANO - sprawdź czy wsystko jest zanim skasujesz"));
 }
 
-void ConcretePlugin::etap_dekiel_cien()
-{
-	moj_widget->etap15->setDisabled(true);
+// void ConcretePlugin::etap_dekiel_cien()
+// {
+// 	moj_widget->etap15->setDisabled(true);
 	
-	QCursor c = moj_widget->cursor();
-	c.setShape(Qt::CursorShape::WaitCursor);
-	moj_widget->setCursor(c);
+// 	QCursor c = moj_widget->cursor();
+// 	c.setShape(Qt::CursorShape::WaitCursor);
+// 	moj_widget->setCursor(c);
 
-	std::shared_ptr<CMesh> wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
-	std::shared_ptr<CMesh> wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
-	//CVector3d ray = -m_rzutnia_copy->getNormal();
-	CVector3d ray = -m_cutPlane->getNormal();
+// 	std::shared_ptr<CMesh> wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
+// 	std::shared_ptr<CMesh> wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
+// 	//CVector3d ray = -m_rzutnia_copy->getNormal();
+// 	CVector3d ray = -m_cutPlane->getNormal();
 
-	calosc = dekiel_cien(wierzch, wnetrze, ray);
+// 	calosc = dekiel_cien(wierzch, wnetrze, ray);
 	
 
 
-	UI::STATUSBAR::setText(L"Prawdopodobnie gotowe !");
+// 	UI::STATUSBAR::setText(L"Prawdopodobnie gotowe !");
 
-	moj_widget->info_zapis = new WidgetInfo({
-		QString::fromUtf8("W tym miejscu mozesz sobie zapisać ważniejsze siatki."),
-		QString::fromUtf8("coś tu więcej napiszę jesli to będzie działało..."),
-		});
-	moj_widget->info_zapis->btStart->setText("ZAPISZ");
+// 	moj_widget->info_zapis = new WidgetInfo({
+// 		QString::fromUtf8("W tym miejscu mozesz sobie zapisać ważniejsze siatki."),
+// 		QString::fromUtf8("coś tu więcej napiszę jesli to będzie działało..."),
+// 		});
+// 	moj_widget->info_zapis->btStart->setText("ZAPISZ");
 
-	moj_layout->addRow(moj_widget->info_zapis);
+// 	moj_layout->addRow(moj_widget->info_zapis);
 
-	QObject::connect(moj_widget->info_zapis->btStart, &QPushButton::clicked, [&]() {
-		go_to_multisaver();
-		});
+// 	QObject::connect(moj_widget->info_zapis->btStart, &QPushButton::clicked, [&]() {
+// 		go_to_multisaver();
+// 		});
 
 
-	moj_widget->info_koncowe = new WidgetInfo({
-		QString::fromUtf8("Zrobione."),
-		QString::fromUtf8("Szyna powinna być widoczna w oknie po lewej pod nazwą \"całość\"."),
-		QString::fromUtf8("Niestety aby znów skorzystać z wtyczki musisz uruchomić program ponownie."),
-		QString::fromUtf8("It's not a bug, it's the feature..."),
-		});
-	moj_widget->info_koncowe->btStart->setText("KONIEC");
+// 	moj_widget->info_koncowe = new WidgetInfo({
+// 		QString::fromUtf8("Zrobione."),
+// 		QString::fromUtf8("Szyna powinna być widoczna w oknie po lewej pod nazwą \"całość\"."),
+// 		QString::fromUtf8("Niestety aby znów skorzystać z wtyczki musisz uruchomić program ponownie."),
+// 		QString::fromUtf8("It's not a bug, it's the feature..."),
+// 		});
+// 	moj_widget->info_koncowe->btStart->setText("KONIEC");
 
-	moj_layout->addRow(moj_widget->info_koncowe);
+// 	moj_layout->addRow(moj_widget->info_koncowe);
 
-	QObject::connect(moj_widget->info_koncowe->btStart, &QPushButton::clicked, [&]() {
-		qInfo() << "TEST 1";
-		etap_zapisz_wynik(); 
-	});
+// 	QObject::connect(moj_widget->info_koncowe->btStart, &QPushButton::clicked, [&]() {
+// 		qInfo() << "TEST 1";
+// 		etap_zapisz_wynik(); 
+// 	});
 
-	c.setShape(Qt::CursorShape::ArrowCursor);
-	moj_widget->setCursor(c);
-}
+// 	c.setShape(Qt::CursorShape::ArrowCursor);
+// 	moj_widget->setCursor(c);
+// }
 
 void ConcretePlugin::etap_zapisz_wynik()
 {
@@ -1698,4 +1739,1446 @@ bool ConcretePlugin::onModelIndication(int objId)
 		UI::STATUSBAR::setText("NOTHING TO DO");
 	}
 	return true;
+}
+
+
+
+
+void computeFullChamferDistanceTransform(const VoxelGrid& grid, std::vector<float>& distanceGrid)
+{
+	const int dimX = grid.dimX, dimY = grid.dimY, dimZ = grid.dimZ;
+	distanceGrid.resize(dimX * dimY * dimZ, std::numeric_limits<float>::max());
+
+	// 1. Inicjalizacja: voxele zaj�te (materia�) = 0.0, reszta = INF
+//#pragma omp parallel for
+	for (int z = 0; z < dimZ; ++z)
+		for (int y = 0; y < dimY; ++y)
+			for (int x = 0; x < dimX; ++x)
+			{
+				if (grid.at(x, y, z) == 1)
+					distanceGrid[x + y * dimX + z * dimX * dimY] = 0.0f;
+			}
+
+	// 2. Przygotuj 26-kierunkow� mask�
+	std::vector<std::tuple<int, int, int, float>> offsets;
+	offsets.reserve(26);
+
+	for (int dz = -1; dz <= 1; ++dz)
+		for (int dy = -1; dy <= 1; ++dy)
+			for (int dx = -1; dx <= 1; ++dx)
+				if (!(dx == 0 && dy == 0 && dz == 0))
+				{
+					float cost = std::sqrt(dx * dx + dy * dy + dz * dz);
+					offsets.emplace_back(dx, dy, dz, cost);
+				}
+
+	// 3. Forward pass
+//#pragma omp parallel for
+	for (int z = 0; z < dimZ; ++z)
+		for (int y = 0; y < dimY; ++y)
+			for (int x = 0; x < dimX; ++x)
+			{
+				int idx = x + y * dimX + z * dimX * dimY;
+				float& currentDist = distanceGrid[idx];
+
+				for (const auto& [dx, dy, dz, cost] : offsets)
+				{
+					int nx = x + dx, ny = y + dy, nz = z + dz;
+					if (nx >= 0 && ny >= 0 && nz >= 0 && nx < dimX && ny < dimY && nz < dimZ)
+					{
+						int nidx = nx + ny * dimX + nz * dimX * dimY;
+						float newDist = distanceGrid[nidx] + cost;
+						if (newDist < currentDist)
+							currentDist = newDist;
+					}
+				}
+			}
+
+	// 4. Backward pass
+//#pragma omp parallel for
+	for (int z = dimZ - 1; z >= 0; --z)
+		for (int y = dimY - 1; y >= 0; --y)
+			for (int x = dimX - 1; x >= 0; --x)
+			{
+				int idx = x + y * dimX + z * dimX * dimY;
+				float& currentDist = distanceGrid[idx];
+
+				for (const auto& [dx, dy, dz, cost] : offsets)
+				{
+					int nx = x + dx, ny = y + dy, nz = z + dz;
+					if (nx >= 0 && ny >= 0 && nz >= 0 && nx < dimX && ny < dimY && nz < dimZ)
+					{
+						int nidx = nx + ny * dimX + nz * dimX * dimY;
+						float newDist = distanceGrid[nidx] + cost;
+						if (newDist < currentDist)
+							currentDist = newDist;
+					}
+				}
+			}
+}
+
+
+
+
+void applyDilation(VoxelGrid& grid, const std::vector<float>& distanceGrid, float dilationRadius)
+{
+	int dimX = grid.dimX, dimY = grid.dimY, dimZ = grid.dimZ;
+
+#pragma omp parallel for
+	for (int z = 0; z < dimZ; ++z) {
+		for (int y = 0; y < dimY; ++y) {
+			for (int x = 0; x < dimX; ++x) {
+				int idx = x + y * dimX + z * dimX * dimY;
+				if (distanceGrid[idx] <= dilationRadius / grid.voxelSize) {
+					grid.at(x, y, z) = 1;  // zaznacz jako cz�� rozszerzonej siatki
+				}
+			}
+		}
+	}
+}
+
+void applyErosion(VoxelGrid& grid, const std::vector<float>& distanceGrid, float erosionRadius)
+{
+	int dimX = grid.dimX, dimY = grid.dimY, dimZ = grid.dimZ;
+
+#pragma omp parallel for
+	for (int z = 0; z < dimZ; ++z) {
+		for (int y = 0; y < dimY; ++y) {
+			for (int x = 0; x < dimX; ++x) {
+				int idx = x + y * dimX + z * dimX * dimY;
+
+				// je�li dany woksel NALE�Y do obiektu,
+				// ale jest zbyt blisko kraw�dzi � usu� go
+				if (grid.at(x, y, z) == 1 &&
+					distanceGrid[idx] < erosionRadius / grid.voxelSize)
+				{
+					grid.at(x, y, z) = 0;
+				}
+			}
+		}
+	}
+}
+
+
+
+void dylatacja(const VoxelGrid& input, VoxelGrid& output, double val)
+{
+	std::vector<float> distanceGrid(input.dimX * input.dimY * input.dimZ, std::numeric_limits<float>::max());
+	computeFullChamferDistanceTransform(input, distanceGrid);
+	output = input;
+	applyDilation(output, distanceGrid, val);
+}
+
+
+
+
+void erozja(const VoxelGrid& input, VoxelGrid& output, double val)
+{
+	VoxelGrid inverted;
+	inverted.allocateLike(input);
+	inverted.negate(input);
+
+	std::vector<float> distanceGrid(input.dimX * input.dimY * input.dimZ, std::numeric_limits<float>::max());
+	computeFullChamferDistanceTransform(inverted, distanceGrid);
+	output = input;
+	applyErosion(output, distanceGrid, val);
+}
+
+
+void applyMedianFilter3D(const VoxelGrid& input, VoxelGrid& output)
+{
+	output = input;  // kopiujemy metadane i dane
+
+#pragma omp parallel for
+	for (int z = 1; z < input.dimZ - 1; ++z) {
+		for (int y = 1; y < input.dimY - 1; ++y) {
+			for (int x = 1; x < input.dimX - 1; ++x) {
+				std::vector<uint8_t> neighborhood;
+
+				for (int dz = -1; dz <= 1; ++dz)
+					for (int dy = -1; dy <= 1; ++dy)
+						for (int dx = -1; dx <= 1; ++dx)
+							neighborhood.push_back(input.at(x + dx, y + dy, z + dz));
+
+				std::nth_element(neighborhood.begin(), neighborhood.begin() + 13, neighborhood.end());
+				uint8_t median = neighborhood[13];  // mediana w 3x3x3 = 14-ty element
+
+				output.at(x, y, z) = median;
+			}
+		}
+	}
+}
+
+
+
+void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
+{
+	//auto prgs = IProgressListener::getDefault();
+
+	stempel = okluzja;
+
+	// tworz� bry�� - wype�niam wn�trze wokselami
+	stempel.fillUp();
+
+	UI::PROGRESSBAR::init(0, 100, 0);
+	UI::PROGRESSBAR::setText("Budowa stempla");
+
+	// kopia klocka do p�niejszego wyciskania
+	auto kopia = stempel;
+
+	// teraz zape�niam ca�y �uk wzd�u� Z wokselami - gubi� kszta�t z�b�w
+	stempel.fillDown();
+
+	UI::PROGRESSBAR::setValue(10);
+
+	// pogrubiona kopia w celu zaklejenia przestrzeni mi�dzyz�bowych
+	VoxelGrid dilatedKopia;
+	dylatacja(kopia, dilatedKopia, 3.0);
+
+	UI::PROGRESSBAR::setValue(20);
+
+	VoxelGrid imprint;
+	imprint.allocateLike(stempel);
+
+	// tu robi� odcisk tej pogrubionej kopii
+	imprint.diff_of(stempel, dilatedKopia);
+
+
+	UI::PROGRESSBAR::setValue(30);
+
+	// je�li zosta�y zadziory, to pr�buj� je usun��
+	VoxelGrid tmp_imprint;
+	erozja(imprint, tmp_imprint, 2.0);
+
+	UI::PROGRESSBAR::setValue(40);
+
+	// i ponownie rozepcha� odcisk by da�o si� w nim odbi� oryginalne z�by
+	dylatacja(tmp_imprint, imprint, 6.0);
+
+	UI::PROGRESSBAR::setValue(50);
+
+	// odciskam oryginalne z�by
+	imprint.diff_in_place(kopia);
+
+	UI::PROGRESSBAR::setValue(60);
+
+	VoxelGrid filtered;
+	applyMedianFilter3D(imprint, filtered);
+
+	UI::PROGRESSBAR::setValue(70);
+
+	erozja(filtered, tmp_imprint, 0.3);
+	dylatacja(tmp_imprint, imprint, 2.0);
+
+	// odciskam oryginalne z�by
+	imprint.diff_in_place(kopia);
+
+	UI::PROGRESSBAR::setValue(80);
+
+	// vox_stempel wci�� zawiera odbicie �uku z�bowego, gdzie dla ka�dego Z woksel==1
+	// troch� go odchudzam po x i y
+	VoxelGrid tmp_stempel;
+	erozja(stempel, tmp_stempel, 1.0);
+
+	UI::PROGRESSBAR::setValue(90);
+
+	// i bior� cz�� wsp�ln� z szerokim wyciskiem, by usun�� niepotrzebn� grubo��
+	stempel.intersection_of(tmp_stempel, imprint);
+
+	// teraz vox_stempel zawiera odcisk z�b�w
+
+	UI::PROGRESSBAR::hide();
+}
+
+
+
+struct Vec3 {
+	float x, y, z;
+
+	Vec3 operator-(const Vec3& other) const {
+		return Vec3{ x - other.x, y - other.y, z - other.z };
+	}
+
+	float dot(const Vec3& other) const {
+		return x * other.x + y * other.y + z * other.z;
+	}
+
+	Vec3 cross(const Vec3& other) const {
+		return Vec3{
+			y * other.z - z * other.y,
+			z * other.x - x * other.z,
+			x * other.y - y * other.x
+		};
+	}
+
+	float norm() const {
+		return std::sqrt(dot(*this));
+	}
+};
+
+
+float distancePointToTriangle(
+	float px, float py, float pz,
+	const CVertex& v0, const CVertex& v1, const CVertex& v2)
+{
+	Vec3 p{ px, py, pz };
+	Vec3 a{ v0.x, v0.y, v0.z };
+	Vec3 b{ v1.x, v1.y, v1.z };
+	Vec3 c{ v2.x, v2.y, v2.z };
+
+	// edge vectors
+	Vec3 ab = b - a;
+	Vec3 ac = c - a;
+	Vec3 ap = p - a;
+
+	float d1 = ab.dot(ap);
+	float d2 = ac.dot(ap);
+
+	if (d1 <= 0 && d2 <= 0) return (p - a).norm(); // barycentric region outside A
+
+	Vec3 bp = p - b;
+	float d3 = ab.dot(bp);
+	float d4 = ac.dot(bp);
+	if (d3 >= 0 && d4 <= d3) return (p - b).norm(); // outside B
+
+	float vc = d1 * d4 - d3 * d2;
+	if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+		float v = d1 / (d1 - d3);
+		Vec3 proj = Vec3{ a.x + v * ab.x, a.y + v * ab.y, a.z + v * ab.z };
+		return (p - proj).norm(); // on edge AB
+	}
+
+	Vec3 cp = p - c;
+	float d5 = ab.dot(cp);
+	float d6 = ac.dot(cp);
+	if (d6 >= 0 && d5 <= d6) return (p - c).norm(); // outside C
+
+	float vb = d5 * d2 - d1 * d6;
+	if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+		float w = d2 / (d2 - d6);
+		Vec3 proj = Vec3{ a.x + w * ac.x, a.y + w * ac.y, a.z + w * ac.z };
+		return (p - proj).norm(); // on edge AC
+	}
+
+	float va = d3 * d6 - d5 * d4;
+	if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
+		float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+		Vec3 edge = Vec3{ c.x - b.x, c.y - b.y, c.z - b.z };
+		Vec3 proj = Vec3{ b.x + w * edge.x, b.y + w * edge.y, b.z + w * edge.z };
+		return (p - proj).norm(); // on edge BC
+	}
+
+	// inside face region
+	Vec3 n = ab.cross(ac);
+	n = Vec3{ n.x / n.norm(), n.y / n.norm(), n.z / n.norm() }; // unit normal
+	float dist = std::abs((p - a).dot(n));
+	return dist;
+}
+
+
+
+VoxelGrid rasterizeMeshToVoxels(
+	const std::vector<CVertex>& vertices,
+	const std::vector<CFace>& faces,
+	float voxelSize)
+{
+	// 1. znajd� bounding box
+	float minX = std::numeric_limits<float>::max(), minY = minX, minZ = minX;
+	float maxX = -minX, maxY = -minX, maxZ = -minX;
+
+	for (const auto& v : vertices) {
+		minX = std::min(minX, v.x); maxX = std::max(maxX, v.x);
+		minY = std::min(minY, v.y); maxY = std::max(maxY, v.y);
+		minZ = std::min(minZ, v.z); maxZ = std::max(maxZ, v.z);
+	}
+
+	// Mo�na doda� zapas
+	float padding = 2.0; // voxelSize * 2;
+	minX -= padding; minY -= padding; minZ -= 10.0;
+	maxX += padding; maxY += padding; maxZ += padding;
+
+	int dimX = std::ceil((maxX - minX) / voxelSize);
+	int dimY = std::ceil((maxY - minY) / voxelSize);
+	int dimZ = std::ceil((maxZ - minZ) / voxelSize);
+
+	VoxelGrid grid;
+	grid.voxelSize = voxelSize;
+	grid.dimX = dimX;
+	grid.dimY = dimY;
+	grid.dimZ = dimZ;
+	grid.minX = minX;
+	grid.minY = minY;
+	grid.minZ = minZ;
+
+
+
+	grid.data.resize(dimX * dimY * dimZ, 0);
+
+	// 2. rasteryzacja tr�jk�t�w
+	for (const auto& face : faces) {
+		const CVertex& v0 = vertices[face.A()];
+		const CVertex& v1 = vertices[face.B()];
+		const CVertex& v2 = vertices[face.C()];
+
+		// oszacuj bounding box tr�jk�ta w voxelach
+		float triMinX = std::min({ v0.x, v1.x, v2.x });
+		float triMinY = std::min({ v0.y, v1.y, v2.y });
+		float triMinZ = std::min({ v0.z, v1.z, v2.z });
+		float triMaxX = std::max({ v0.x, v1.x, v2.x });
+		float triMaxY = std::max({ v0.y, v1.y, v2.y });
+		float triMaxZ = std::max({ v0.z, v1.z, v2.z });
+
+		int startX = std::max(0, (int)((triMinX - minX) / voxelSize));
+		int endX = std::min(dimX - 1, (int)((triMaxX - minX) / voxelSize));
+		int startY = std::max(0, (int)((triMinY - minY) / voxelSize));
+		int endY = std::min(dimY - 1, (int)((triMaxY - minY) / voxelSize));
+		int startZ = std::max(0, (int)((triMinZ - minZ) / voxelSize));
+		int endZ = std::min(dimZ - 1, (int)((triMaxZ - minZ) / voxelSize));
+
+		// dla ka�dego voxela w bounding boxie sprawd�, czy tr�jk�t go przecina
+		for (int z = startZ; z <= endZ; ++z) {
+			for (int y = startY; y <= endY; ++y) {
+				for (int x = startX; x <= endX; ++x) {
+					// oblicz �rodek voxela
+					float cx = minX + (x + 0.5f) * voxelSize;
+					float cy = minY + (y + 0.5f) * voxelSize;
+					float cz = minZ + (z + 0.5f) * voxelSize;
+
+					// sprawd� odleg�o�� od �rodka voxela do tr�jk�ta
+					float dist = distancePointToTriangle(cx, cy, cz, v0, v1, v2);
+
+					if (dist <= voxelSize * 0.866f) {  // przek�tna sze�cianu / 2
+						grid.at(x, y, z) = 1;
+					}
+				}
+			}
+		}
+	}
+
+	return grid;
+}
+
+#include "Volumetric.h"
+
+
+std::shared_ptr<Volumetric> createVolumetric(VoxelGrid& voxel_grid)
+{
+	auto vol = Volumetric::create(voxel_grid.dimZ, voxel_grid.dimY, voxel_grid.dimX);
+
+	Volumetric::VoxelType maks = 0;
+
+	for (int l = 0; l < voxel_grid.dimZ; l++)
+		for (int r = 0; r < voxel_grid.dimY; r++)
+			for (int c = 0; c < voxel_grid.dimX; c++) {
+				Volumetric::VoxelType val = 1000 * voxel_grid.at(c, r, l);
+				vol->at(l, r, c) = val;
+				if (maks < val) maks = val;
+			}
+
+	for (int i = 0; i < vol->metadata.size(); i++)
+	{
+		auto& md = vol->metadata[i];
+
+		md.image_position_patient[0] = voxel_grid.minX; // += delta[0];
+		md.image_position_patient[1] = voxel_grid.minY; // += delta[1];
+		md.image_position_patient[2] = voxel_grid.minZ + voxel_grid.voxelSize * i;
+
+		md.slice_location = md.image_position_patient[2];
+
+		md.pixel_spacing[0] = voxel_grid.voxelSize;
+		md.pixel_spacing[1] = voxel_grid.voxelSize;
+		md.slice_distance = voxel_grid.voxelSize;
+		md.slice_thickness = voxel_grid.voxelSize;
+	}
+
+	vol->adjustMinMax();
+	vol->adjustMinMaxColor(maks + 1);
+
+	return vol;
+}
+
+
+
+std::shared_ptr<CMesh> ConcretePlugin::stempelOnMesh(std::shared_ptr<CMesh> mesh) {
+	if (mesh)
+	{
+		// rasteryzacja -> wokselowy odpowiednik siatki
+		vox_okluzja = rasterizeMeshToVoxels(mesh->vertices(), mesh->faces(), 0.1);
+
+		createStempel(vox_okluzja, vox_stempel);
+
+		auto vol = createVolumetric(vox_stempel);
+
+		//AP::WORKSPACE::addObject(vol);
+
+		std::shared_ptr<CMesh> stempel = nullptr;
+		if (stempel = vol->marching_cube(1)) {
+			stempel->setLabel("stempel");
+			if (AP::WORKSPACE::addObject(stempel)) {
+				stempel->getParentPtr()->setLabel("stempel");
+			}
+		}
+
+		UI::DOCK::WORKSPACE::update();
+		UI::updateAllViews();
+
+		return stempel;
+	}
+	return nullptr;
+}
+
+
+void ConcretePlugin::onStempelButton() {
+	auto sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
+
+	if (sel.size() > 0)
+	{
+		auto isel = sel.begin();
+
+		auto mesh = std::dynamic_pointer_cast<CMesh>(*isel);
+
+		stempelOnMesh(mesh);
+	}
+}
+
+//--------------------------------------------------------------------
+
+
+#include "KDNode2.h"
+
+
+void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> stempel, double _distMax)
+{
+	//	unsigned long t1 = GetTickCount();
+
+	KDNode2* tree = KDNode2::build(stempel.get(), 10240);
+	KDNode2::HitMap hmap;
+
+	//rzutnia->calcVN();
+
+	//CPoint3d mid = rzutnia->getCenterOfWeight();
+
+	int last_i = 0;
+	for (int i = 0; i < wierzch->vertices().size(); i++) {
+		//		UI::STATUSBAR::printfTimed(1000, L"Tworz� wycisk stempla. Wertex %d z %d.", i, wierzch->vertices().size());
+
+		CVertex p0 = wierzch->vertices()[i];
+
+		KDNode2* ptr = tree;
+
+		bool found = false;
+
+		CVector3d mv(0.0, 0.0, -1.0);
+
+		double shift = 2.0;
+		CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
+
+		hmap.clear();
+		bool hit = tree->hit(stempel.get(), p0mv, mv, hmap);
+
+		if (hit) {
+			//qInfo() << "hmap size = " << hmap.size();
+
+			double dist = (*hmap.begin()).second.first;
+			CPoint3d p1 = (*hmap.begin()).second.second;
+			int idx = (*hmap.begin()).first;
+
+			for (auto h : hmap) {
+				double dd = h.second.first;
+
+				if (dd < dist) {
+					dist = dd;
+					p1 = h.second.second;
+					idx = h.first;
+				}
+			}
+
+			if (dist <= shift + _distMax)
+			{
+				if (last_i + 1000 < i) {
+					qInfo() << "i = " << i << " dist = " << dist;
+					last_i = i;
+				}
+
+				double dz = p1.z - wierzch->vertices()[i].z;
+
+				if (dz > 0)
+					wierzch->vertices()[i].z = p1.z + 0.1;
+				//else
+				//	wierzch->vertices()[i].z += 0.1;
+			}
+		}
+
+	}
+
+
+	//	UI::STATUSBAR::printf(L"Wycisk stempla gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
+
+	//	UI::updateAllViews();
+}
+
+
+
+void ConcretePlugin::onOdciskStemplaButton(double distMax)
+{
+	qInfo() << "odcisk stempla";
+	auto sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
+
+	if (sel.size() > 0)
+	{
+		auto isel = sel.begin();
+
+		auto wierzch = std::dynamic_pointer_cast<CMesh>((*isel)->getCopy());
+		wierzch->setParent(nullptr);
+		isel++;
+		auto stempel = std::dynamic_pointer_cast<CMesh>((*isel)->getCopy());
+		stempel->setParent(nullptr);
+
+		zrobOdciskStempla(wierzch, stempel, distMax);
+
+		AP::WORKSPACE::addObject(wierzch);
+	}
+}
+
+
+
+//-----------------------------------------------------------------------------------
+
+
+
+
+
+#include "CollisionDetector.h"
+#include "AnnotationSetOfFaces.h"
+#include "triangulacja.h"
+
+void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
+
+	std::map<INDEX_TYPE, std::set<INDEX_TYPE>*> crossed;
+
+	if (CollisionDetector::getIntersectionOfMeshWithMesh3d(mesh1, mesh2, crossed))
+	{
+		//std::set<INDEX_TYPE> s1, s2;
+
+		//for (auto pair : crossed)
+		//{
+		//	s1.insert(pair.first);
+		//	s2.insert(pair.second->begin(), pair.second->end());
+		//}
+
+		auto ed = std::make_shared<CAnnotationEdges>();
+
+		SplitTriangles2(mesh1, mesh2, crossed, *ed);
+
+		AP::OBJECT::addChild(mesh1, ed);
+
+		UI::STATUSBAR::setText("Ready. You can see sugested faces.");
+	}
+	else
+	{
+		UI::STATUSBAR::setText("No intersections found");
+	}
+
+
+
+}
+
+
+
+#include <omp.h>
+#include <mutex>
+
+void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
+{
+	std::mutex mtx;
+
+	//	unsigned long t1 = GetTickCount();
+
+	KDNode2* tree = KDNode2::build(stempel, 5000);
+
+	int last_i = 0;
+
+
+#pragma omp parallel
+	{
+		std::set<INDEX_TYPE> local_set;
+
+#pragma omp for
+		for (int i = 0; i < wierzch->vertices().size(); i++) {
+
+			CVertex p0 = wierzch->vertices()[i];
+
+			// punkt pocz�tkowy dla wyszukiwania
+			CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
+
+			KDNode2::HitMap hmap;
+			bool hit = tree->hit(stempel, p0mv, mv, hmap);
+
+			if (hit) {
+				double dist = (*hmap.begin()).second.first;
+				CPoint3d p1 = (*hmap.begin()).second.second;
+				int idx = (*hmap.begin()).first;
+
+				if (hmap.size() > 1) {
+					for (auto h : hmap) {
+						double dd = h.second.first;
+
+						if (dd < dist) {
+							dist = dd;
+							p1 = h.second.second;
+							idx = h.first;
+						}
+					}
+				}
+
+				//if (shift >= 0)
+				//{
+				if (dist > abs(shift))
+				{
+					// punkt nale�y do przeciecia
+					local_set.insert(i);
+
+					if (last_i + 1000 < i) {
+						qInfo() << "i = " << i << " dist = " << dist;
+						last_i = i;
+					}
+				}
+				//}
+				//else
+				//{
+				//	if (dist > abs(shift))
+				//	{
+				//		// punkt nale�y do przeciecia
+				//		local_set.insert(i);
+
+				//		if (last_i + 1000 < i) {
+				//			qInfo() << "i = " << i << " dist = " << dist;
+				//			last_i = i;
+				//		}
+				//	}
+				//}
+			}
+
+		}
+
+		// Po zako�czeniu pracy w�tku, scal wyniki
+		std::lock_guard<std::mutex> lock(mtx);
+		vertices_to_remove.insert(local_set.begin(), local_set.end());
+
+	}
+}
+
+
+
+void ConcretePlugin::onZrobDziuryButton()
+{
+	qInfo() << "robimy dziury, Hej!!!";
+	auto sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
+
+	if (sel.size() > 0)
+	{
+		auto isel = sel.begin();
+
+		auto wierzch = std::dynamic_pointer_cast<CMesh>(*isel);
+		auto wierzch_nowy = std::dynamic_pointer_cast<CMesh>(wierzch->getCopy());
+		wierzch_nowy->setParent(nullptr);
+		wierzch_nowy->removeDuplicateVertices();
+
+		isel++;
+
+		auto wnetrze = std::dynamic_pointer_cast<CMesh>(*isel);
+		auto wnetrze_nowe = std::dynamic_pointer_cast<CMesh>(wnetrze->getCopy());
+		wnetrze_nowe->setParent(nullptr);
+		wnetrze_nowe->removeDuplicateVertices();
+
+
+		przeciecia(wierzch_nowy, wnetrze_nowe);
+
+
+
+		std::set<INDEX_TYPE> vertices_to_remove;
+		std::vector<INDEX_TYPE> faces_to_remove;
+
+
+
+		qInfo() << "--- dziury w wierzchu...";
+		zamienPrzecieciaNaDziury2(wierzch_nowy.get(), wnetrze.get(), 10.0, CVector3d(0.0, 0.0, -1.0), vertices_to_remove);
+
+		qInfo() << QString("--- wierzcho�k�w do usuni�cia jest: %1").arg(vertices_to_remove.size());
+
+		qInfo() << "--- usuwanie nadmiarowych scianek...";
+
+		for (INDEX_TYPE j = 0; j < wierzch_nowy->faces().size(); j++) {
+			CFace& f = wierzch_nowy->faces()[j];
+
+			if ((vertices_to_remove.find(f.A()) != vertices_to_remove.end()) ||
+				(vertices_to_remove.find(f.B()) != vertices_to_remove.end()) ||
+				(vertices_to_remove.find(f.C()) != vertices_to_remove.end()))
+			{
+				faces_to_remove.push_back(j);
+			}
+		}
+
+		qInfo() << QString("--- znaleziono: %1").arg(faces_to_remove.size());
+
+		qInfo() << QString("--- lb. scianek przed usuwaniem: %1").arg(wierzch_nowy->faces().size());
+		qInfo() << QString("--- lb. wierzcholkow przed usuwaniem: %1").arg(wierzch_nowy->vertices().size());
+
+		// na wszelki wypadek, �eby miec pewno��, �e indeksy s� malej�co
+		std::sort(faces_to_remove.begin(), faces_to_remove.end(), std::greater<INDEX_TYPE>());
+
+		for (INDEX_TYPE j : faces_to_remove) {
+			wierzch_nowy->removeFace(j);
+		}
+
+		qInfo() << QString("--- lb. scianek po usuwaniu: %1").arg(wierzch_nowy->faces().size());
+
+
+		wierzch_nowy->removeUnusedVertices();
+
+		qInfo() << QString("--- lb. wierzcholkow po usuwaniu: %1").arg(wierzch_nowy->vertices().size());
+
+		wierzch_nowy->setLabel("wierzch_nowy");
+		AP::WORKSPACE::addObject(wierzch_nowy);
+
+
+
+
+
+
+		vertices_to_remove.clear();
+		faces_to_remove.clear();
+
+
+
+		qInfo() << "--- dziury we wnetrzu...";
+		zamienPrzecieciaNaDziury2(wnetrze_nowe.get(), wierzch.get(), -10.0, CVector3d(0.0, 0.0, 1.0), vertices_to_remove);
+
+		qInfo() << QString("--- wierzcho�k�w do usuni�cia jest: %1").arg(vertices_to_remove.size());
+
+		qInfo() << "--- usuwanie nadmiarowych scianek...";
+
+		for (INDEX_TYPE j = 0; j < wnetrze_nowe->faces().size(); j++) {
+			CFace& f = wnetrze_nowe->faces()[j];
+
+			if ((vertices_to_remove.find(f.A()) != vertices_to_remove.end()) ||
+				(vertices_to_remove.find(f.B()) != vertices_to_remove.end()) ||
+				(vertices_to_remove.find(f.C()) != vertices_to_remove.end()))
+			{
+				faces_to_remove.push_back(j);
+			}
+		}
+
+		qInfo() << QString("--- znaleziono: %1").arg(faces_to_remove.size());
+
+		qInfo() << QString("--- lb. scianek przed usuwaniem: %1").arg(wnetrze_nowe->faces().size());
+		qInfo() << QString("--- lb. wierzcholkow przed usuwaniem: %1").arg(wnetrze_nowe->vertices().size());
+
+		// na wszelki wypadek, �eby miec pewno��, �e indeksy s� malej�co
+		std::sort(faces_to_remove.begin(), faces_to_remove.end(), std::greater<INDEX_TYPE>());
+
+		for (INDEX_TYPE j : faces_to_remove) {
+			wnetrze_nowe->removeFace(j);
+		}
+
+		qInfo() << QString("--- lb. scianek po usuwaniu: %1").arg(wnetrze_nowe->faces().size());
+
+		faces_to_remove.clear();
+
+		wnetrze_nowe->removeUnusedVertices();
+
+		qInfo() << QString("--- lb. wierzcholkow po usuwaniu: %1").arg(wnetrze_nowe->vertices().size());
+
+		wnetrze_nowe->setLabel("wnetrze_nowe");
+		AP::WORKSPACE::addObject(wnetrze_nowe);
+	}
+}
+
+
+std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze)
+{
+	qInfo() << "robimy dziury, Hej!!!";
+
+	if (wierzch && wnetrze)
+	{
+		auto wierzch_nowy = std::dynamic_pointer_cast<CMesh>(wierzch->getCopy());
+		wierzch_nowy->setParent(nullptr);
+		wierzch_nowy->removeDuplicateVertices();
+
+		auto wnetrze_nowe = std::dynamic_pointer_cast<CMesh>(wnetrze->getCopy());
+		wnetrze_nowe->setParent(nullptr);
+		wnetrze_nowe->removeDuplicateVertices();
+
+		przeciecia(wierzch_nowy, wnetrze_nowe);
+
+		std::set<INDEX_TYPE> vertices_to_remove;
+		std::vector<INDEX_TYPE> faces_to_remove;
+
+		qInfo() << "--- dziury w wierzchu...";
+		zamienPrzecieciaNaDziury2(wierzch_nowy.get(), wnetrze.get(), 10.0, CVector3d(0.0, 0.0, -1.0), vertices_to_remove);
+
+		qInfo() << QString("--- wierzcho�k�w do usuni�cia jest: %1").arg(vertices_to_remove.size());
+
+		qInfo() << "--- usuwanie nadmiarowych scianek...";
+
+		for (INDEX_TYPE j = 0; j < wierzch_nowy->faces().size(); j++) {
+			CFace& f = wierzch_nowy->faces()[j];
+
+			if ((vertices_to_remove.find(f.A()) != vertices_to_remove.end()) ||
+				(vertices_to_remove.find(f.B()) != vertices_to_remove.end()) ||
+				(vertices_to_remove.find(f.C()) != vertices_to_remove.end()))
+			{
+				faces_to_remove.push_back(j);
+			}
+		}
+
+		qInfo() << QString("--- znaleziono: %1").arg(faces_to_remove.size());
+
+		qInfo() << QString("--- lb. scianek przed usuwaniem: %1").arg(wierzch_nowy->faces().size());
+		qInfo() << QString("--- lb. wierzcholkow przed usuwaniem: %1").arg(wierzch_nowy->vertices().size());
+
+		// na wszelki wypadek, �eby miec pewno��, �e indeksy s� malej�co
+		std::sort(faces_to_remove.begin(), faces_to_remove.end(), std::greater<INDEX_TYPE>());
+
+		for (INDEX_TYPE j : faces_to_remove) {
+			wierzch_nowy->removeFace(j);
+		}
+
+		qInfo() << QString("--- lb. scianek po usuwaniu: %1").arg(wierzch_nowy->faces().size());
+
+
+		wierzch_nowy->removeUnusedVertices();
+
+		qInfo() << QString("--- lb. wierzcholkow po usuwaniu: %1").arg(wierzch_nowy->vertices().size());
+
+		wierzch_nowy->setLabel("wierzch_nowy");
+		//AP::WORKSPACE::addObject(wierzch_nowy);
+
+
+		vertices_to_remove.clear();
+		faces_to_remove.clear();
+
+		qInfo() << "--- dziury we wnetrzu...";
+		zamienPrzecieciaNaDziury2(wnetrze_nowe.get(), wierzch.get(), -10.0, CVector3d(0.0, 0.0, 1.0), vertices_to_remove);
+
+		qInfo() << QString("--- wierzcho�k�w do usuni�cia jest: %1").arg(vertices_to_remove.size());
+
+		qInfo() << "--- usuwanie nadmiarowych scianek...";
+
+		for (INDEX_TYPE j = 0; j < wnetrze_nowe->faces().size(); j++) {
+			CFace& f = wnetrze_nowe->faces()[j];
+
+			if ((vertices_to_remove.find(f.A()) != vertices_to_remove.end()) ||
+				(vertices_to_remove.find(f.B()) != vertices_to_remove.end()) ||
+				(vertices_to_remove.find(f.C()) != vertices_to_remove.end()))
+			{
+				faces_to_remove.push_back(j);
+			}
+		}
+
+		qInfo() << QString("--- znaleziono: %1").arg(faces_to_remove.size());
+
+		qInfo() << QString("--- lb. scianek przed usuwaniem: %1").arg(wnetrze_nowe->faces().size());
+		qInfo() << QString("--- lb. wierzcholkow przed usuwaniem: %1").arg(wnetrze_nowe->vertices().size());
+
+		// na wszelki wypadek, �eby miec pewno��, �e indeksy s� malej�co
+		std::sort(faces_to_remove.begin(), faces_to_remove.end(), std::greater<INDEX_TYPE>());
+
+		for (INDEX_TYPE j : faces_to_remove) {
+			wnetrze_nowe->removeFace(j);
+		}
+
+		qInfo() << QString("--- lb. scianek po usuwaniu: %1").arg(wnetrze_nowe->faces().size());
+
+		faces_to_remove.clear();
+
+		wnetrze_nowe->removeUnusedVertices();
+
+		qInfo() << QString("--- lb. wierzcholkow po usuwaniu: %1").arg(wnetrze_nowe->vertices().size());
+
+		wnetrze_nowe->setLabel("wnetrze_nowe");
+		//AP::WORKSPACE::addObject(wnetrze_nowe);
+
+		return { wierzch_nowy, wnetrze_nowe };
+	}
+	return { nullptr, nullptr };
+}
+
+//------------------------------------------------------------------------------------------------------------------
+
+
+// Funkcja znajduje skierowane krawędzie brzegowe (czyli takie, które występują tylko raz w danym kierunku)
+void findBoundaryEdgesWithDirection(const std::vector<CFace>& faces,
+	std::vector<CEdge>& boundaryEdges,
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& boundaryGraph)
+{
+	using Edge = std::pair<INDEX_TYPE, INDEX_TYPE>;
+	std::unordered_map<Edge, INDEX_TYPE, PairHash> directedEdgeCount;
+
+	for (const CFace& f : faces) {
+		directedEdgeCount[{f.A(), f.B()}]++;
+		directedEdgeCount[{f.B(), f.C()}]++;
+		directedEdgeCount[{f.C(), f.A()}]++;
+	}
+
+	boundaryEdges.clear();
+	boundaryGraph.clear();
+
+	for (const auto& [e, count] : directedEdgeCount) {
+		Edge reversed = { e.second, e.first };
+		if (count == 1 && directedEdgeCount.find(reversed) == directedEdgeCount.end()) {
+			boundaryEdges.emplace_back(e.first, e.second);
+			boundaryGraph[e.first].push_back(e.second);
+		}
+	}
+}
+
+
+#include <unordered_set>
+
+
+std::vector<std::vector<INDEX_TYPE>> findBoundaryLoops(
+	const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& boundaryGraph)
+{
+	std::unordered_set<std::pair<INDEX_TYPE, INDEX_TYPE>, PairHash> visitedEdges;
+	std::vector<std::vector<INDEX_TYPE>> loops;
+
+	for (const auto& [start, neighbors] : boundaryGraph) {
+		for (INDEX_TYPE next : neighbors) {
+			std::pair<INDEX_TYPE, INDEX_TYPE> edge = { start, next };
+
+			if (visitedEdges.find(edge) != visitedEdges.end())
+				continue;
+
+			std::vector<INDEX_TYPE> loop;
+			INDEX_TYPE current = start;
+			INDEX_TYPE prev = -1;
+
+			loop.push_back(current);
+
+			while (true) {
+				const auto it = boundaryGraph.find(current);
+				if (it == boundaryGraph.end())
+					break;
+
+				const auto& nextList = it->second;
+
+				INDEX_TYPE foundNext = -1;
+				for (INDEX_TYPE candidate : nextList) {
+					std::pair<INDEX_TYPE, INDEX_TYPE> e = { current, candidate };
+
+					if (visitedEdges.find(e) == visitedEdges.end()) {
+						foundNext = candidate;
+						visitedEdges.insert(e);
+						break;
+					}
+				}
+
+				if (foundNext == -1)
+					break;
+
+				current = foundNext;
+				loop.push_back(current);
+
+				if (current == start) {
+					if (loop.size() >= 3)
+						loops.push_back(loop);
+					break;
+				}
+			}
+		}
+	}
+
+	return loops;
+}
+
+
+
+float squaredDistance(const CVertex& a, const CVertex& b) {
+	float dx = a.x - b.x;
+	float dy = a.y - b.y;
+	float dz = a.z - b.z;
+	return dx * dx + dy * dy + dz * dz;
+}
+
+
+// Nowa funkcja mostkująca: pary punktów z jednej pętli -> jeden z drugiej
+std::pair<std::vector<CVertex>, std::vector<CFace>> BridgingByMidpointMatching(
+	const std::vector<CVertex>& V1, const std::vector<unsigned int>& IS_V1,
+	const std::vector<CVertex>& V2, const std::vector<unsigned int>& IS_V2,
+	float maxDistance = 2.0f)
+{
+	std::vector<CVertex> outVertices;
+	std::vector<CFace> outFaces;
+
+	const float maxDistSquared = maxDistance * maxDistance;
+
+	for (size_t i = 0; i < IS_V1.size(); ++i) {
+		size_t i2 = (i + 1) % IS_V1.size();
+
+		const CVertex& a = V1[IS_V1[i]];
+		const CVertex& b = V1[IS_V1[i2]];
+
+		// Środek odcinka a-b
+		CVertex mid;
+		mid.x = 0.5f * (a.x + b.x);
+		mid.y = 0.5f * (a.y + b.y);
+		mid.z = 0.5f * (a.z + b.z);
+
+		// Znajdź najbliższy punkt z drugiej siatki
+		float minDist2 = std::numeric_limits<float>::max();
+		int bestIdx = -1;
+		for (unsigned int j : IS_V2) {
+			//if (used_in_V2.find(j) != used_in_V2.end())
+			//    continue;
+
+			float d2 = squaredDistance(mid, V2[j]);
+			if (d2 < minDist2) {
+				minDist2 = d2;
+				bestIdx = j;
+			}
+		}
+
+		if (bestIdx != -1 && minDist2 < maxDistSquared) {
+			// Dodajemy trójkąt (a, best, b)
+			int idxA = static_cast<int>(outVertices.size());
+			outVertices.push_back(a);
+			outVertices.push_back(V2[bestIdx]);
+			outVertices.push_back(b);
+			outFaces.emplace_back(CFace(idxA, idxA + 1, idxA + 2));
+
+			//used_in_V2.insert(bestIdx);
+		}
+	}
+
+	return { outVertices, outFaces };
+}
+
+
+
+std::shared_ptr<CMesh> scalSiatki(std::vector<std::shared_ptr<CMesh>> siatki)
+{
+	auto result = std::make_shared<CMesh>();
+
+	for (auto m : siatki) {
+
+		for (auto f : m->faces()) {
+			int idx = result->vertices().size();
+
+			result->vertices().push_back(m->vertices()[f.A()]);
+			result->vertices().push_back(m->vertices()[f.B()]);
+			result->vertices().push_back(m->vertices()[f.C()]);
+
+			result->faces().push_back(CFace(idx, idx + 1, idx + 2));
+		}
+	}
+
+	result->removeDuplicateVertices(0.01);
+
+	return result;
+}
+
+
+std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze) {
+	if (wierzch && wnetrze)
+	{
+		wierzch->removeDuplicateVertices();
+		wnetrze->removeDuplicateVertices();
+
+		std::pair< std::vector<CVertex>, std::vector<CFace> > result;
+
+		std::vector<CEdge> sz_ed;
+		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> sz_bGraph;
+
+		findBoundaryEdgesWithDirection(wierzch->faces(), sz_ed, sz_bGraph);
+		std::vector<std::vector<INDEX_TYPE>> sz_loops = findBoundaryLoops(sz_bGraph);
+
+		auto sz_ae = std::make_shared<CAnnotationEdges>();
+
+		std::vector<INDEX_TYPE> IS_V;
+
+		for (auto e : sz_ed) {
+			IS_V.push_back(e.first);
+			sz_ae->addEdge(wierzch->vertices()[e.first], wierzch->vertices()[e.second]);
+		}
+
+
+		std::vector<CEdge> ok_ed;
+		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> ok_bGraph;
+
+		findBoundaryEdgesWithDirection(wnetrze->faces(), ok_ed, ok_bGraph);
+		std::vector<std::vector<INDEX_TYPE>> ok_loops = findBoundaryLoops(ok_bGraph);
+
+		auto ok_ae = std::make_shared<CAnnotationEdges>();
+
+		std::vector<INDEX_TYPE> IS_VZ;
+
+		for (auto e : ok_ed) {
+			IS_VZ.push_back(e.first);
+			ok_ae->addEdge(wnetrze->vertices()[e.first], wnetrze->vertices()[e.second]);
+		}
+
+		std::vector<std::shared_ptr<CMesh>> siatki;
+
+		for (auto l = 0; l < sz_loops.size(); l++) {
+
+			qInfo() << QString("loop: %1, size: %2").arg(l).arg(sz_loops[l].size());
+
+			result = BridgingByMidpointMatching(wierzch->vertices(), sz_loops[l], wnetrze->vertices(), IS_VZ, 8.0);
+
+			qInfo() << QString("---- vertices: %1, faces: %2").arg(result.first.size()).arg(result.second.size());
+
+			auto mostki = std::make_shared<CMesh>();
+
+			mostki->vertices() = result.first;
+			mostki->faces() = result.second;
+
+			mostki->removeDuplicateVertices();
+
+			siatki.push_back(mostki);
+		}
+
+		auto mesh1 = scalSiatki(siatki);
+
+		auto test = scalSiatki({ wierzch, wnetrze, mesh1 });
+
+		return test;
+	}
+
+	return nullptr;
+}
+
+
+//----------------------------------------------------------------------------
+
+
+
+
+//// Funkcja znajduje skierowane krawędzie brzegowe (czyli takie, które występują tylko raz w danym kierunku)
+//void findBoundaryEdgesWithDirection(const std::vector<CFace>& faces,
+//	std::vector<CEdge>& boundaryEdges,
+//	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& boundaryGraph)
+//{
+//	using Edge = std::pair<INDEX_TYPE, INDEX_TYPE>;
+//	std::unordered_map<Edge, INDEX_TYPE, PairHash> directedEdgeCount;
+//
+//	for (const CFace& f : faces) {
+//		directedEdgeCount[{f.A(), f.B()}]++;
+//		directedEdgeCount[{f.B(), f.C()}]++;
+//		directedEdgeCount[{f.C(), f.A()}]++;
+//	}
+//
+//	boundaryEdges.clear();
+//	boundaryGraph.clear();
+//
+//	for (const auto& [e, count] : directedEdgeCount) {
+//		Edge reversed = { e.second, e.first };
+//		if (count == 1 && directedEdgeCount.find(reversed) == directedEdgeCount.end()) {
+//			boundaryEdges.emplace_back(e.first, e.second);
+//			boundaryGraph[e.first].push_back(e.second);
+//		}
+//	}
+//}
+
+#include <queue>
+
+std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& graph)
+{
+	std::queue<std::vector<INDEX_TYPE>> q;
+	std::unordered_set<INDEX_TYPE> visited;
+
+	q.push({ start });
+
+	while (!q.empty()) {
+		auto path = q.front(); q.pop();
+		INDEX_TYPE current = path.back();
+
+		auto it = graph.find(current);
+		if (it == graph.end())
+			return {};
+		//continue; // brak sąsiadów – pomiń
+
+	//for (INDEX_TYPE neighbor : graph.at(current)) {
+		for (INDEX_TYPE neighbor : it->second) {
+			if (neighbor == start && path.size() >= 3) {
+				path.push_back(start);
+				return path; // domknięty cykl
+			}
+
+			// unikamy powtórzeń
+			if (std::find(path.begin(), path.end(), neighbor) == path.end()) {
+				auto newPath = path;
+				newPath.push_back(neighbor);
+				q.push(newPath);
+			}
+		}
+	}
+
+	return {}; // brak cyklu
+}
+
+
+
+
+
+std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges(const std::vector<CEdge>& boundaryEdges)
+{
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> graph; // , back_graph;
+	std::unordered_set<INDEX_TYPE> vertices_remains;
+	for (const CEdge& edge : boundaryEdges) {
+		graph[edge.first].push_back(edge.second);
+
+		//        back_graph[edge.second].push_back(edge.first);
+
+		vertices_remains.insert(edge.first);
+		vertices_remains.insert(edge.second);
+	}
+
+
+	std::vector<std::vector<INDEX_TYPE>> loops;
+
+	auto current = vertices_remains.begin();
+	while (current != vertices_remains.end()) {
+
+		std::vector<INDEX_TYPE> path = findShortestCycleFrom(*current, graph);
+
+		if (path.empty()) {
+			vertices_remains.erase(*current);
+		}
+		else {
+			loops.push_back(path);
+
+			for (auto p : path) {
+				vertices_remains.erase(p);
+			}
+		}
+
+		current = vertices_remains.begin();
+	}
+
+	return loops;
+}
+
+
+
+#include "AnnotationEdges.h"
+#include "../api/AP.h"
+
+// Funkcja zamyka wszystkie wykryte pętle brzegowe tworząc wachlarze trójkątów wokół centroidu
+std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std::vector<CVertex>& vertices, const std::vector<CFace>& faces)
+{
+	// PLEASE NOTE: INDEX_TYPE is currently defined as uint32_t
+
+	std::vector<CEdge> boundaryEdges;
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> boundaryGraph;
+
+	findBoundaryEdgesWithDirection(faces, boundaryEdges, boundaryGraph);
+
+
+
+	//    CAnnotationEdges* ok_ae = new CAnnotationEdges();
+
+	std::vector<INDEX_TYPE> IS_VZ;
+
+	for (auto e : boundaryEdges) {
+		IS_VZ.push_back(e.first);
+		//        ok_ae->addEdge(vertices[e.first], vertices[e.second]);
+	}
+
+	//    AP::WORKSPACE::addObject(ok_ae);
+
+
+	auto loops = findBoundaryLoopsFromEdges(boundaryEdges);
+	qDebug() << "Znaleziono pętli:" << loops.size();
+
+	//auto loops = filterDisjointEdgeLoops(rawLoops);
+	//qDebug() << "Po filtracji:" << loops.size();
+
+	std::vector<CVertex> outVertices;
+	std::vector<CFace> outFaces;
+
+	int cnt = 0;
+	for (const auto& loop : loops) {
+		qInfo() << QString("loop: %1, size: %2").arg(cnt).arg(loop.size());
+		cnt++;
+
+		if (loop.size() < 3) {
+			qInfo() << "WADLIWA PETLA";
+			continue;
+		}
+		else if (loop.size() > 500) {
+			qInfo() << "ZA DUZA PETLA";
+			continue;
+		}
+		else if (loop.size() == 3) {
+			CVertex a = vertices[loop[2]];
+			CVertex b = vertices[loop[1]];
+			CVertex c = vertices[loop[0]];
+
+			int aIdx = static_cast<int>(outVertices.size());
+			int bIdx = aIdx + 1;
+			int cIdx = aIdx + 2;
+
+			outVertices.push_back(a);
+			outVertices.push_back(b);
+			outVertices.push_back(c);
+
+			outFaces.emplace_back(CFace(aIdx, bIdx, cIdx));
+		}
+		else {
+			// Oblicz centroid
+			CVertex center = { 0, 0, 0 };
+			for (int idx : loop) {
+				center += vertices[idx];
+			}
+			float inv = 1.0f / loop.size();
+			center *= inv;
+
+			// Dodaj centroid do wynikowej listy i zapamiętaj jego indeks
+			int centerIndex = static_cast<int>(outVertices.size());
+			outVertices.push_back(center);
+
+			// Dodaj trójkąty wachlarzowe z istniejących punktów pętli
+			for (size_t i = 0; i < loop.size(); ++i) {
+				CVertex a = vertices[loop[i]];
+				CVertex b = vertices[loop[(i + 1) % loop.size()]];
+				int aIdx = static_cast<int>(outVertices.size());
+				int bIdx = aIdx + 1;
+				outVertices.push_back(a);
+				outVertices.push_back(b);
+				outFaces.emplace_back(CFace(aIdx, centerIndex, bIdx));
+			}
+		}
+	}
+
+	return { outVertices, outFaces };
+}
+
+
+
+
+
+
+
+std::shared_ptr<CMesh> ConcretePlugin::filling(std::shared_ptr<CMesh> test)
+{
+	if (test)
+	{
+		test->removeDuplicateVertices();
+
+		auto new_faces = FillBoundaryLoops(test->vertices(), test->faces());
+
+		auto nowe = std::make_shared<CMesh>();
+
+		nowe->vertices() = new_faces.first;
+		nowe->faces() = new_faces.second;
+
+		nowe->removeDuplicateVertices();
+
+		auto full = scalSiatki({ test, nowe });
+
+		return full;
+	}
+
+	return nullptr;
 }

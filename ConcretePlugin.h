@@ -21,10 +21,18 @@ class CPlane;
 
 #include <QtWidgets>
 
+#include "VoxelGrid.h"
+
 
 #include "moje_widgety.h"
 
 typedef enum { Nic, Sczeke, Zuchwe, Okluzje } CzekamNa;
+
+struct PairHash {
+	std::size_t operator()(const std::pair<unsigned int, unsigned int>& p) const {
+		return std::hash<unsigned int>()(p.first) ^ (std::hash<unsigned int>()(p.second) << 1);
+	}
+};
 
 
 class DPVISION_DLL_API ConcretePlugin : public QObject, public PluginInterface
@@ -60,6 +68,8 @@ class DPVISION_DLL_API ConcretePlugin : public QObject, public PluginInterface
 	std::shared_ptr<CModel3D> top_model_arch;
 	std::shared_ptr<CMesh> mesh_wierzch, mesh_wnetrze;
 
+	VoxelGrid vox_szyna, vox_okluzja, vox_wynik, vox_stempel;
+
 public:
     ConcretePlugin(void);
     ~ConcretePlugin(void);
@@ -83,13 +93,15 @@ public:
 	void etap00(double dist2, bool dane_z_pomiaru);
 	void etap01(int div);
 	void etap11();
-	void etap12(double dVal);
-	void etap13_v2(double dVal);
-	void etap14();
+    void etap123(double dValIn, double dValOut);
+    void wytlaczanie();
+    // void etap12(double dVal);
+    // void etap13_v2(double dVal);
+    void etap14();
 
 	void go_to_exchange();
 
-	void etap_dekiel_cien();
+	// void etap_dekiel_cien();
 
 	void go_to_multisaver();
 
@@ -104,6 +116,23 @@ public:
 	std::shared_ptr<CMesh> dekiel_cien(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze, CVector3d ray);
 	void createE2Fmap(std::shared_ptr<CMesh> mesh, MapOfNewEdges& allEdges);
 	virtual bool onModelIndication(int objId) override;
+
+	std::shared_ptr<CMesh> stempelOnMesh(std::shared_ptr<CMesh> mesh);
+
+	void onStempelButton();
+
+
+	void zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> stempel, double _distMax);
+	void onOdciskStemplaButton(double distMax = 0.0);
+
+
+	void onZrobDziuryButton();
+
+	std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze);
+
+	std::shared_ptr<CMesh> bridging(std::shared_ptr<CMesh> sz, std::shared_ptr<CMesh> ok);
+
+	std::shared_ptr<CMesh> filling(std::shared_ptr<CMesh> test);
 
 signals:
 	void setProgressBarValue(int);

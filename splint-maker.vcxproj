@@ -145,8 +145,10 @@
     </ClCompile>
     <ClCompile Include="Siateczka1.cpp" />
     <ClCompile Include="BiteSim.cpp" />
+    <ClCompile Include="VoxelGrid.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="VoxelGrid.h" />
     <QtMoc Include="ConcretePlugin.h" />
     <QtMoc Include="..\..\dpVision\src\gui\ProgressIndicator.h" />
     <ClInclude Include="CollisionDetector.h" />

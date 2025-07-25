@@ -820,8 +820,6 @@ void CSiateczka1::usunNadmiaroweScianki()
 		}
 	}
 
-	qInfo() << "TEST4";
-
 	rzutnia->faces() = std::vector<CFace>(newFaces);
 	rzutnia->fnormals() = std::vector<CVector3f>(newNormals);
 

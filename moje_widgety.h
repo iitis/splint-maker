@@ -164,51 +164,35 @@ public:
 };
 
 
-class WidgetEtap12 : public QWidget {
+class WidgetEtap123 : public QWidget {
 	Q_OBJECT
 public:
 	QLabel* insideDistLabel;
 	QDoubleSpinBox* insideDist;
-	QPushButton* btStart;
+	QLabel* outsideDistLabel;
+	QDoubleSpinBox* outsideDist;
+	QPushButton* btStart23;
 
-	WidgetEtap12(QWidget* p = nullptr) : QWidget(p) {
+	WidgetEtap123(QWidget* p = nullptr) : QWidget(p) {
 		insideDistLabel = new QLabel(QString::fromUtf8("rozepchanie wnetrza w mm"));
+		outsideDistLabel = new QLabel(QString::fromUtf8("rozepchanie wierzchu w mm"));
 		insideDist = new QDoubleSpinBox();
 		insideDist->setValue(0.3);
-		btStart = new QPushButton(QString::fromUtf8("generuj wnętrze"));
+		outsideDist = new QDoubleSpinBox();
+		outsideDist->setValue(1.3);
+		btStart23 = new QPushButton(QString::fromUtf8("generuj powierzchnie"));
 
 		QFormLayout* l = new QFormLayout(this);
 
 		l->addRow(insideDistLabel, insideDist);
-		l->addRow(btStart);
-
-		this->setLayout(l);
-	}
-};
-
-
-class WidgetEtap13 : public QWidget {
-	Q_OBJECT
-public:
-	QLabel* outsideDistLabel;
-	QDoubleSpinBox* outsideDist;
-	QPushButton* btStart, *btStart2, *btStart3;
-
-	WidgetEtap13(QWidget* p = nullptr) : QWidget(p) {
-		outsideDistLabel = new QLabel(QString::fromUtf8("rozepchanie wierzchu w mm"));
-		outsideDist = new QDoubleSpinBox();
-		outsideDist->setValue(1.3);
-		btStart2 = new QPushButton(QString::fromUtf8("generuj wierzch"));
-		
-		QFormLayout* l = new QFormLayout(this);
-
 		l->addRow(outsideDistLabel, outsideDist);
-		l->addRow(btStart2);
-		
+		l->addRow(btStart23);
 
 		this->setLayout(l);
 	}
 };
+
+
 
 
 class WidgetInfo : public QWidget {
@@ -242,8 +226,7 @@ public:
 	WidgetWyborSiatek* wybor_siatek;
 	WidgetPrzytnijSzczeke* przytnij_szczene;
 	WidgetEtap1* etap11;
-	WidgetEtap12* etap12;
-	WidgetEtap13* etap13;
+	WidgetEtap123* etap123;
 	WidgetInfo *widget_info, *etap14, *etap15, *info_koncowe, *info_zapis, *info_exchange;
 	QPushButton* dotnij_btn;
 
