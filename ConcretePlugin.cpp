@@ -58,7 +58,7 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 
 	CMesh::KDtree *kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
 
-	UI::STATUSBAR::setText("Looking for unwanted vertices. Plese wait...");
+	UI::STATUSBAR::setText("Looking for unwanted vertices. Please wait...");
 	UI::PROGRESSBAR::init(0, szczeka->vertices().size(), 0);
 
 	int progress = 0;
@@ -110,13 +110,6 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 			emit setProgressBarValue(progress);
 		}
 	}
-
-	// Usunięcie elementów w sposób sekwencyjny
-	// auto it = std::remove_if(faces.begin(), faces.end(),
-	// 	[&toErase, idx = 0](const CFace&) mutable {
-	// 		return toErase[idx++];
-	// 	});
-	// faces.erase(it, faces.end());
 
     size_t idx = 0;
     auto it = std::remove_if(faces.begin(), faces.end(),
@@ -199,22 +192,20 @@ std::shared_ptr<CMesh> meshWithKeywordInLabel(QString keyword, CObject::Children
 void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 {
 	QString fileName = QDir::toNativeSeparators(
-		QFileDialog::getOpenFileName( 0, QString::fromUtf8("Wybierz plik szczeki"), AppSettings::mainSettings()->value("recentFile").toString(), CFileConnector::getLoadExts())
+		QFileDialog::getOpenFileName( 0, QString::fromUtf8("Select upper jaw file"), AppSettings::mainSettings()->value("recentFile").toString(), CFileConnector::getLoadExts())
 	);
 
 	if (!fileName.isEmpty() && QFileInfo(fileName).exists()) {
 		std::shared_ptr<CModel3D> obj = AP::WORKSPACE::loadModel(fileName);
 		
 		if (obj == nullptr) { //ERROR
-			UI::MESSAGEBOX::error(QString::fromUtf8("Nie udało sie otworzyć pliku %1").arg(fileName), QString::fromUtf8("Błąd odczytu pliku"));
+			UI::MESSAGEBOX::error(QString::fromUtf8("Failed to open file %1").arg(fileName), QString::fromUtf8("File read error"));
 			return;
 		}
 
 		if (obj->hasChildren()) {
 			AppSettings::mainSettings()->setValue("recentFile", fileName);
 		}
-
-		qInfo() << QString("Licznik referencji do obj: %1").arg(obj.use_count());
 
 		UI::updateAllViews();
 
@@ -257,9 +248,6 @@ void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 			oklu = meshWithKeywordInLabel("occlusion", obj->children());
 		}
 
-
-		qInfo() << QString("Licznik referencji do oklu: %1").arg(oklu.use_count());
-		//return;
 
 		if (oklu) {
 			moj_widget->wybor_siatek->ustawOkluzje(oklu->getLabel());
@@ -574,7 +562,45 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 	moj_layout->addRow(moj_widget->info_zapis);
 
 	QObject::connect(moj_widget->info_zapis->btStart, &QPushButton::clicked, [&]() { save_all(); });
+
+
+	moj_widget->info_koncowe = new WidgetInfo({
+		QString::fromUtf8("Remove all models and reset plugin."),
+		});
+	moj_widget->info_koncowe->btStart->setText("RESET");
+
+	moj_layout->addRow(moj_widget->info_koncowe);
+
+	QObject::connect(moj_widget->info_koncowe->btStart, &QPushButton::clicked, [&]() { reset_plugin(); });
+
 }
+
+
+
+void ConcretePlugin::reset_plugin() 
+{
+	AP::WORKSPACE::removeAllModels();
+
+	waiting_for = CzekamNa::Nic;
+	szcz = nullptr;
+	oklu = nullptr;
+	zuch = nullptr;
+	szcz_parent = nullptr;
+	top_model_arch = nullptr;
+	mesh_wierzch = nullptr;
+	mesh_wnetrze = nullptr;
+
+	symulator = nullptr;
+
+	m_cutPlane = nullptr;
+	m_plaszczyzna_rzutowania = nullptr;
+
+	m_divider = 10;
+
+	UI::PLUGINPANEL::clear(m_ID);
+	showMainPanel();
+}
+
 
 void ConcretePlugin::wytlaczanie()
 {
@@ -589,27 +615,29 @@ void ConcretePlugin::wytlaczanie()
 
 	auto tmp = meshWithKeywordInLabel(QString("wierzch_mesh"), kids);
 	if (tmp) {
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
 		CTransform t0, t1(M);
 		tmp->applyTransformation(t1, t0);
 		wi = tmp;
 		wi->setLabel("wierzch");
+		wi->removeAllChilds();
 	}
 
 	tmp = meshWithKeywordInLabel(QString("wnetrze_mesh"), kids);
 	if (tmp) {
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
 		CTransform t0, t1(M);
 		tmp->applyTransformation(t1, t0);
 		wn = tmp;
 		wn->setLabel("wnetrze");
+		wn->removeAllChilds();
 	}
 
 	tmp = meshWithKeywordInLabel(QString("testowa zuchwa"), kids);
 	if (tmp) {
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
 		CTransform t0, t1(M);
 		tmp->applyTransformation(t1, t0);
@@ -620,7 +648,7 @@ void ConcretePlugin::wytlaczanie()
 	tmp = meshWithKeywordInLabel(QString("szczeka_mesh"), kids);
 	if (tmp)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
 		CTransform t0, t1(M);
 		tmp->applyTransformation(t1, t0);
@@ -631,7 +659,7 @@ void ConcretePlugin::wytlaczanie()
 	tmp = meshWithKeywordInLabel(QString("okluzja_mesh"), kids);
 	if (tmp)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(tmp);
 		CTransform t0, t1(M);
 		tmp->applyTransformation(t1, t0);
@@ -835,49 +863,49 @@ void ConcretePlugin::save_all()
 	auto tmp = meshWithKeywordInLabel(QString("wierzch"), kids);
 	if (tmp != nullptr)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		save_mesh(tmp, "wierzch", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wierzch").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("wnetrze"), kids);
 	if (tmp != nullptr)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		save_mesh(tmp, "wnetrze", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wnetrze").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("zuchwa"), kids);
 	if (tmp != nullptr)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		save_mesh(tmp, "zuchwa", QString("%1/%2.%3").arg(dir.absolutePath()).arg("zuchwa").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("szczeka"), kids);
 	if (tmp != nullptr)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		save_mesh(tmp, "szczeka", QString("%1/%2.%3").arg(dir.absolutePath()).arg("szczeka").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("okluzja"), kids);
 	if (tmp != nullptr)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		save_mesh(tmp, "okluzja", QString("%1/%2.%3").arg(dir.absolutePath()).arg("okluzja").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("stempel"), kids);
 	if (tmp != nullptr)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		save_mesh(tmp, "stempel", QString("%1/%2.%3").arg(dir.absolutePath()).arg("stempel").arg(splint_info.completeSuffix()));
 	}
 
 	tmp = meshWithKeywordInLabel(QString("szyna"), kids);
 	if (tmp != nullptr)
 	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
+		qInfo() << "Found: " << tmp->getLabel();
 		save_mesh(tmp, "szyna", QString("%1/%2.%3").arg(dir.absolutePath()).arg("szyna").arg(splint_info.completeSuffix()));
 	}
 
@@ -956,7 +984,7 @@ void ConcretePlugin::showMainPanel()
 	moj_layout->addRow(moj_widget->przytnij_szczene);
 	moj_widget->przytnij_szczene->setDisabled(true);
 
-	moj_widget->etap11 = new WidgetEtap1();
+	moj_widget->etap11 = new WidgetGestoscSiatki();
 
 	QObject::connect(moj_widget->etap11->btStart, &QPushButton::clicked, [&]() { etap01(moj_widget->etap11->meshDivider->value()); });
 
@@ -967,7 +995,7 @@ void ConcretePlugin::showMainPanel()
 
 void ConcretePlugin::onLoad()
 {
-	UI::PLUGINPANEL::create( m_ID, "Projekt szyny" );
+	UI::PLUGINPANEL::create( m_ID, "Splint Maker" );
 
 	showMainPanel();
 }
@@ -1670,14 +1698,6 @@ void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
 
 	if (CollisionDetector::getIntersectionOfMeshWithMesh3d(mesh1, mesh2, crossed))
 	{
-		//std::set<INDEX_TYPE> s1, s2;
-
-		//for (auto pair : crossed)
-		//{
-		//	s1.insert(pair.first);
-		//	s2.insert(pair.second->begin(), pair.second->end());
-		//}
-
 		auto ed = std::make_shared<CAnnotationEdges>();
 
 		SplitTriangles2(mesh1, mesh2, crossed, *ed);
@@ -1703,8 +1723,6 @@ void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
 void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
 {
 	std::mutex mtx;
-
-	//	unsigned long t1 = GetTickCount();
 
 	KDNode2* tree = KDNode2::build(stempel, 5000);
 
@@ -1743,8 +1761,6 @@ void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVe
 					}
 				}
 
-				//if (shift >= 0)
-				//{
 				if (dist > abs(shift))
 				{
 					// punkt nale�y do przeciecia
@@ -1755,20 +1771,6 @@ void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVe
 						last_i = i;
 					}
 				}
-				//}
-				//else
-				//{
-				//	if (dist > abs(shift))
-				//	{
-				//		// punkt nale�y do przeciecia
-				//		local_set.insert(i);
-
-				//		if (last_i + 1000 < i) {
-				//			qInfo() << "i = " << i << " dist = " << dist;
-				//			last_i = i;
-				//		}
-				//	}
-				//}
 			}
 
 		}
@@ -2192,34 +2194,6 @@ std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, 
 //----------------------------------------------------------------------------
 
 
-
-
-//// Funkcja znajduje skierowane krawędzie brzegowe (czyli takie, które występują tylko raz w danym kierunku)
-//void findBoundaryEdgesWithDirection(const std::vector<CFace>& faces,
-//	std::vector<CEdge>& boundaryEdges,
-//	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& boundaryGraph)
-//{
-//	using Edge = std::pair<INDEX_TYPE, INDEX_TYPE>;
-//	std::unordered_map<Edge, INDEX_TYPE, PairHash> directedEdgeCount;
-//
-//	for (const CFace& f : faces) {
-//		directedEdgeCount[{f.A(), f.B()}]++;
-//		directedEdgeCount[{f.B(), f.C()}]++;
-//		directedEdgeCount[{f.C(), f.A()}]++;
-//	}
-//
-//	boundaryEdges.clear();
-//	boundaryGraph.clear();
-//
-//	for (const auto& [e, count] : directedEdgeCount) {
-//		Edge reversed = { e.second, e.first };
-//		if (count == 1 && directedEdgeCount.find(reversed) == directedEdgeCount.end()) {
-//			boundaryEdges.emplace_back(e.first, e.second);
-//			boundaryGraph[e.first].push_back(e.second);
-//		}
-//	}
-//}
-
 #include <queue>
 
 std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& graph)
@@ -2236,9 +2210,7 @@ std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unord
 		auto it = graph.find(current);
 		if (it == graph.end())
 			return {};
-		//continue; // brak sąsiadów – pomiń
 
-	//for (INDEX_TYPE neighbor : graph.at(current)) {
 		for (INDEX_TYPE neighbor : it->second) {
 			if (neighbor == start && path.size() >= 3) {
 				path.push_back(start);
@@ -2263,12 +2235,10 @@ std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unord
 
 std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges(const std::vector<CEdge>& boundaryEdges)
 {
-	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> graph; // , back_graph;
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> graph;
 	std::unordered_set<INDEX_TYPE> vertices_remains;
 	for (const CEdge& edge : boundaryEdges) {
 		graph[edge.first].push_back(edge.second);
-
-		//        back_graph[edge.second].push_back(edge.first);
 
 		vertices_remains.insert(edge.first);
 		vertices_remains.insert(edge.second);
@@ -2321,16 +2291,12 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 	UI::PROGRESSBAR::setValue(10);
 
 
-	//    CAnnotationEdges* ok_ae = new CAnnotationEdges();
-
 	std::vector<INDEX_TYPE> IS_VZ;
 
 	for (auto e : boundaryEdges) {
 		IS_VZ.push_back(e.first);
-		//        ok_ae->addEdge(vertices[e.first], vertices[e.second]);
 	}
 
-	//    AP::WORKSPACE::addObject(ok_ae);
 	UI::PROGRESSBAR::setValue(15);
 
 
@@ -2338,9 +2304,6 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 	qDebug() << "Znaleziono pętli:" << loops.size();
 
 	UI::PROGRESSBAR::setValue(25);
-
-	//auto loops = filterDisjointEdgeLoops(rawLoops);
-	//qDebug() << "Po filtracji:" << loops.size();
 
 	std::vector<CVertex> outVertices;
 	std::vector<CFace> outFaces;
