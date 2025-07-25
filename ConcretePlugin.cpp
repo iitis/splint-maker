@@ -1,14 +1,11 @@
 #include "ConcretePlugin.h"
 
 #include "Workspace.h"
-//#include "MainApplication.h"
+
 #include "AnnotationPlane.h"
 #include "AnnotationEdges.h"
 
 #include "BiteSim.h"
-
-//#include "HFMesh.h"
-//#include "HoleFiller.h"
 
 #include "../api/AP.h"
 #include "../api/UI.h"
@@ -20,19 +17,16 @@
 #include "IndexedTriangle.h"
 #include "KDNode.h"
 
-#include "../gui/ProgressIndicator.h"
 #include "FileConnector.h"
 
+#include "../gui/ProgressIndicator.h"
 //#include "interfaces/IProgressListener.h"
 
 #include <memory>
-
 #include <omp.h>
 
-//#define UseICP
-//#define ExpT
-//#include "dpLog.h"
 #include <QDebug>
+//#include "dpLog.h"
 
 ConcretePlugin::ConcretePlugin(void)
 {
@@ -392,14 +386,14 @@ void ConcretePlugin::etap01(int div)
 {
 	if (oklu == nullptr || szcz == nullptr)
 	{
-		UI::MESSAGEBOX::error("Najpierw wybierz siatki do przetwarzania.");
+		UI::MESSAGEBOX::error("First, select the meshes to be processed.");
 		return;
 	}
 
-	moj_widget->etap11->setDisabled(true);
-	moj_widget->przytnij_szczene->setHidden(true); // >setDisabled(true);
-	moj_widget->wybor_siatek->setHidden(true); // > setDisabled(true);
-
+	moj_layout->removeRow(moj_widget->etap11);
+	moj_layout->removeRow(moj_widget->przytnij_szczene);
+	moj_layout->removeRow(moj_widget->wybor_siatek);
+	
 	std::shared_ptr<CModel3D> top_model = szcz_parent;
 	while (top_model->getParent() != nullptr)
 	{
@@ -485,7 +479,7 @@ void ConcretePlugin::etap01(int div)
 	AP::WORKSPACE::setCurrentModel(NO_CURRENT_MODEL);
 
 
-	moj_widget->widget_info = new WidgetInfo({ QString::fromUtf8("Aby odciąć nadmiarowe fragmenty siatki ustaw płaszczyznę cięcia we właściwej pozycji względem szczęki i kliknij \"Dalej\"") });
+	moj_widget->widget_info = new WidgetInfo({ QString::fromUtf8("To cut off excess pieces of mesh, set the cutting plane in the correct position relative to the jaw and click ‘Next’.") });
 
 	moj_layout->addRow(moj_widget->widget_info);
 
@@ -624,7 +618,9 @@ void ConcretePlugin::etap11()
 	moj_widget->etap123 = new WidgetEtap123();
 	moj_layout->addRow(moj_widget->etap123);
 
-	QObject::connect(moj_widget->etap123->btStart23, &QPushButton::clicked, [&]() { etap123(moj_widget->etap123->insideDist->value(), moj_widget->etap123->outsideDist->value()); });
+	QObject::connect(moj_widget->etap123->btStart23, &QPushButton::clicked, [&]() {
+		etap123(moj_widget->etap123->insideDist->value(), moj_widget->etap123->outsideDist->value()); 
+	});
 
 	c.setShape(Qt::CursorShape::ArrowCursor);
 	moj_widget->setCursor(c);
@@ -632,7 +628,6 @@ void ConcretePlugin::etap11()
 
 void ConcretePlugin::etap123(double dValIn, double dValOut)
 {
-	moj_widget->etap11->setDisabled(true);
 	moj_widget->etap123->setDisabled(true);
 
 	QCursor c = moj_widget->cursor();
@@ -666,56 +661,29 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 
 	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
 
-	// m_cutPlane->setSelfVisibility(true);
-	// UI::updateAllViews();
-
-	// moj_widget->etap14 = new WidgetInfo({ QString::fromUtf8("Możesz teraz jeszcze skorygować ustawienie płaszczyzny cięcia. Następnie kliknij przycisk \"Dotnj\".") });
-	// moj_widget->etap14->btStart->setText("Dotnij");
-
-	// moj_layout->addRow(moj_widget->etap14);
-
-	// QObject::connect(moj_widget->etap14->btStart, &QPushButton::clicked, [&]() { etap14(); });
-
 	etap14();
 
-
-	UI::STATUSBAR::setText(L"Prawdopodobnie gotowe !");
-
-	moj_widget->info_zapis = new WidgetInfo({
-		QString::fromUtf8("W tym miejscu mozesz sobie zapisać ważniejsze siatki."),
-		// QString::fromUtf8("coś tu więcej napiszę jesli to będzie działało..."),
-		});
-	moj_widget->info_zapis->btStart->setText("ZAPISZ");
-
-	moj_layout->addRow(moj_widget->info_zapis);
-
-	QObject::connect(moj_widget->info_zapis->btStart, &QPushButton::clicked, [&]() {
-		go_to_multisaver();
-		});
-
-
-	moj_widget->info_koncowe = new WidgetInfo({
-		QString::fromUtf8("Zrobione."),
-		// QString::fromUtf8("Szyna powinna być widoczna w oknie po lewej pod nazwą \"całość\"."),
-		QString::fromUtf8("Niestety aby znów skorzystać z wtyczki musisz uruchomić program ponownie."),
-		QString::fromUtf8("It's not a bug, it's the feature..."),
-		});
-	moj_widget->info_koncowe->btStart->setText("KONIEC");
-
-	moj_layout->addRow(moj_widget->info_koncowe);
-
-	QObject::connect(moj_widget->info_koncowe->btStart, &QPushButton::clicked, [&]() { wytlaczanie(); });
-
+	wytlaczanie();
 
 	c.setShape(Qt::CursorShape::ArrowCursor);
 	moj_widget->setCursor(c);
+
+	moj_widget->info_zapis = new WidgetInfo({
+		QString::fromUtf8("You can save all the important meshes."),
+		// QString::fromUtf8("coś tu więcej napiszę jesli to będzie działało..."),
+		});
+	moj_widget->info_zapis->btStart->setText("LET'S DO IT");
+
+	moj_layout->addRow(moj_widget->info_zapis);
+
+	QObject::connect(moj_widget->info_zapis->btStart, &QPushButton::clicked, [&]() { save_all(); });
 }
 
 void ConcretePlugin::wytlaczanie()
 {
 	CObject::Children kids;
 
-	moj_widget->info_koncowe->setDisabled(true);
+	//moj_widget->info_koncowe->setDisabled(true);
 
 	for (const auto& kid : CWorkspace::instance()->children())
 	{
@@ -786,25 +754,28 @@ void ConcretePlugin::wytlaczanie()
 	
 	UI::DOCK::WORKSPACE::update();
 
-	qInfo() << "budowa stempla";
+	UI::STATUSBAR::setText("Creation of an occlusal stamp");
 
-	auto stmp = stempelOnMesh(ok);
-	
+	auto stmp = stampFromMesh(ok);
 
-	qInfo() << "odcisk stempla";
+	UI::STATUSBAR::setText("Impressing an occlusal stamp on the outer surface of the splint");
 
 	zrobOdciskStempla(wi, stmp, 0.0);
 
-	qInfo() << "odcisk zuchwy";
+	UI::STATUSBAR::setText("Imprinting the lower jaw on the outer surface of the splint");
 
 	zrobOdciskStempla(wi, zu, 0.2);
 
-	qInfo() << "dziury";
+	UI::STATUSBAR::setText("Making holes at intersections");
+
 	auto [wi2, wn2] = zrobDziury(wi, wn);
 
-	qInfo() << "bridging";
+	UI::STATUSBAR::setText("Bridging the outer and inner surfaces");
+
 	if (auto bridged = bridging(wi2, wn2)) {
-		qInfo() << "filling";
+
+		UI::STATUSBAR::setText("Filling holes in the surface");
+
 		if (auto filled = filling(bridged)) {
 			filled->setLabel("szyna");
 			CWorkspace::instance()->_objectAdd(filled);
@@ -812,10 +783,15 @@ void ConcretePlugin::wytlaczanie()
 
 			UI::DOCK::WORKSPACE::update();
 
-			qInfo() << "looks good!!!";
+			UI::STATUSBAR::setText("The splint is ready");
+		}
+		else {
+			UI::STATUSBAR::setText("Error when filling holes");
 		}
 	}
-	qInfo() << "that's all folks...";
+	else {
+		UI::STATUSBAR::setText("Error when bridging surfaces");
+	}
 }
 
 
@@ -887,15 +863,6 @@ void decapitation(std::shared_ptr<CBaseObject> victim, std::shared_ptr<CAnnotati
 
 void ConcretePlugin::etap14()
 {
-	//moj_widget->etap14->setDisabled(true);
-
-	//QCursor c = moj_widget->cursor();
-	//c.setShape(Qt::CursorShape::WaitCursor);
-	//moj_widget->setCursor(c);
-
-	qInfo() << "TEST4";
-
-
 	symulator->wierzch->obj->applyTransform();
 
 	std::shared_ptr<CMesh> wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
@@ -912,53 +879,9 @@ void ConcretePlugin::etap14()
 
 	//----------------------------------------------------------------
 
-	//((CModel3D*)symulator->mBD->getParent())->applyTransform();
-
-	//std::shared_ptr<CMesh>  _mBD = symulator->mBD;
-
-	//decapitation(_mBD, m_cutPlane);
-
-	//----------------------------------------------------------------
-
-	//((CModel3D*)symulator->mZD->getParent())->applyTransform();
-
-	//std::shared_ptr<CMesh>  _mZD = symulator->mZD;
-
-	//decapitation(_mZD, m_cutPlane);
-
-	//----------------------------------------------------------------
-
 	AP::OBJECT::removeChild(symulator->szczeka_obj, m_cutPlane);
 
 	UI::DOCK::WORKSPACE::update();
-
-
-	// moj_widget->info_exchange = new WidgetInfo({
-	// QString::fromUtf8("W tym miejscu powinno sie dać podmienić siatkę reprezentująca wierzch na inną..."),
-	// QString::fromUtf8("Zaznacz checkbox przy siatce (Mesh) która chcesz wstawić do projektu i kliknij:"),
-	// 	});
-	// moj_widget->info_exchange->btStart->setText("EXCHANGE");
-
-	// moj_layout->addRow(moj_widget->info_exchange);
-
-	// QObject::connect(moj_widget->info_exchange->btStart, &QPushButton::clicked, [&]() {
-	// 	go_to_exchange();
-	// 	});
-
-
-	// moj_widget->etap15 = new WidgetInfo({
-	// 	QString::fromUtf8("Program podejmie próbę połączenia powierzchni wewnętrznej i zewnętrznej szyny, tworząc \"wodoszczelną\" siatkę."), 
-	// 	QString::fromUtf8("Ten etap jest jeszcze w fazie testowej i nie zawsze efekt jest zadowalający."),
-	// 	QString::fromUtf8("Może być potrzebne użycie zewnętrznego oprogramowania w celu uzyskania poprawnej siatki.")
-	// 	});
-	// moj_widget->etap15->btStart->setText("Połącz w szynę");
-
-	// moj_layout->addRow(moj_widget->etap15);
-
-	// QObject::connect(moj_widget->etap15->btStart, &QPushButton::clicked, [&]() { etap_dekiel_cien(); });
-
-	// c.setShape(Qt::CursorShape::ArrowCursor);
-	// moj_widget->setCursor(c);
 }
 
 
@@ -1025,6 +948,91 @@ void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 
 	//delete szczeka_obj;
 }
+
+
+
+
+
+
+
+void ConcretePlugin::save_all()
+{
+	QFileInfo fi(AppSettings::mainSettings()->value("recentFile").toString());
+
+	QString init_path = QString("%1/szyna.obj").arg(fi.absoluteDir().absolutePath());
+
+	QString splint_path = UI::FILECHOOSER::getSaveFileName(QString("Wybierz plik zapisu szyny"), init_path, "OBJ File (*.obj)");
+
+	qInfo() << splint_path;
+
+	QFileInfo splint_info(splint_path);
+	QDir dir = splint_info.absoluteDir();
+
+	qInfo() << splint_info.completeSuffix();
+	qInfo() << dir.absolutePath();
+
+	CObject::Children kids;
+
+	for (const auto& kid : AP::WORKSPACE::instance()->children())
+	{
+		kids[kid.first] = kid.second;
+	}
+
+	auto tmp = meshWithKeywordInLabel(QString("wierzch"), kids);
+	if (tmp != nullptr)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		save_mesh(tmp, "wierzch", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wierzch").arg(splint_info.completeSuffix()));
+	}
+
+	tmp = meshWithKeywordInLabel(QString("wnetrze"), kids);
+	if (tmp != nullptr)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		save_mesh(tmp, "wnetrze", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wnetrze").arg(splint_info.completeSuffix()));
+	}
+
+	tmp = meshWithKeywordInLabel(QString("zuchwa"), kids);
+	if (tmp != nullptr)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		save_mesh(tmp, "zuchwa", QString("%1/%2.%3").arg(dir.absolutePath()).arg("zuchwa").arg(splint_info.completeSuffix()));
+	}
+
+	tmp = meshWithKeywordInLabel(QString("szczeka"), kids);
+	if (tmp != nullptr)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		save_mesh(tmp, "szczeka", QString("%1/%2.%3").arg(dir.absolutePath()).arg("szczeka").arg(splint_info.completeSuffix()));
+	}
+
+	tmp = meshWithKeywordInLabel(QString("okluzja"), kids);
+	if (tmp != nullptr)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		save_mesh(tmp, "okluzja", QString("%1/%2.%3").arg(dir.absolutePath()).arg("okluzja").arg(splint_info.completeSuffix()));
+	}
+
+	tmp = meshWithKeywordInLabel(QString("stempel"), kids);
+	if (tmp != nullptr)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		save_mesh(tmp, "stempel", QString("%1/%2.%3").arg(dir.absolutePath()).arg("stempel").arg(splint_info.completeSuffix()));
+	}
+
+	tmp = meshWithKeywordInLabel(QString("szyna"), kids);
+	if (tmp != nullptr)
+	{
+		qInfo() << "Znaleziono: " << tmp->getLabel();
+		save_mesh(tmp, "szyna", QString("%1/%2.%3").arg(dir.absolutePath()).arg("szyna").arg(splint_info.completeSuffix()));
+	}
+
+	UI::STATUSBAR::setText(QString::fromUtf8("ZAPISANO"));
+}
+
+
+
+
 
 void ConcretePlugin::go_to_multisaver()
 {
@@ -2199,7 +2207,7 @@ std::shared_ptr<Volumetric> createVolumetric(VoxelGrid& voxel_grid)
 
 
 
-std::shared_ptr<CMesh> ConcretePlugin::stempelOnMesh(std::shared_ptr<CMesh> mesh) {
+std::shared_ptr<CMesh> ConcretePlugin::stampFromMesh(std::shared_ptr<CMesh> mesh) {
 	if (mesh)
 	{
 		// rasteryzacja -> wokselowy odpowiednik siatki
@@ -2211,18 +2219,16 @@ std::shared_ptr<CMesh> ConcretePlugin::stempelOnMesh(std::shared_ptr<CMesh> mesh
 
 		//AP::WORKSPACE::addObject(vol);
 
-		std::shared_ptr<CMesh> stempel = nullptr;
-		if (stempel = vol->marching_cube(1)) {
+		if (auto stempel = vol->marching_cube(1)) {
 			stempel->setLabel("stempel");
-			if (AP::WORKSPACE::addObject(stempel)) {
-				stempel->getParentPtr()->setLabel("stempel");
-			}
+			//if (AP::WORKSPACE::addObject(stempel)) {
+			//	stempel->getParentPtr()->setLabel("stempel");
+			//	UI::DOCK::WORKSPACE::update();
+			//	UI::updateAllViews();
+			//}
+
+			return stempel;
 		}
-
-		UI::DOCK::WORKSPACE::update();
-		UI::updateAllViews();
-
-		return stempel;
 	}
 	return nullptr;
 }
@@ -2237,7 +2243,7 @@ void ConcretePlugin::onStempelButton() {
 
 		auto mesh = std::dynamic_pointer_cast<CMesh>(*isel);
 
-		stempelOnMesh(mesh);
+		stampFromMesh(mesh);
 	}
 }
 
@@ -2257,6 +2263,9 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 	//rzutnia->calcVN();
 
 	//CPoint3d mid = rzutnia->getCenterOfWeight();
+
+	UI::PROGRESSBAR::init(0, wierzch->vertices().size(), 0);
+	UI::PROGRESSBAR::setText("Imprinting:");
 
 	int last_i = 0;
 	for (int i = 0; i < wierzch->vertices().size(); i++) {
@@ -2296,7 +2305,8 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 			if (dist <= shift + _distMax)
 			{
 				if (last_i + 1000 < i) {
-					qInfo() << "i = " << i << " dist = " << dist;
+					//qInfo() << "i = " << i << " dist = " << dist;
+					UI::PROGRESSBAR::setValue(i);
 					last_i = i;
 				}
 
@@ -2311,6 +2321,7 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 
 	}
 
+	UI::PROGRESSBAR::hide();
 
 	//	UI::STATUSBAR::printf(L"Wycisk stempla gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
 
@@ -2597,7 +2608,8 @@ void ConcretePlugin::onZrobDziuryButton()
 
 std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze)
 {
-	qInfo() << "robimy dziury, Hej!!!";
+	UI::PROGRESSBAR::init(0, 100, 0);
+	UI::PROGRESSBAR::setText("Making holes:");
 
 	if (wierzch && wnetrze)
 	{
@@ -2605,17 +2617,26 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 		wierzch_nowy->setParent(nullptr);
 		wierzch_nowy->removeDuplicateVertices();
 
+		UI::PROGRESSBAR::setValue(10);
+
 		auto wnetrze_nowe = std::dynamic_pointer_cast<CMesh>(wnetrze->getCopy());
 		wnetrze_nowe->setParent(nullptr);
 		wnetrze_nowe->removeDuplicateVertices();
 
+		UI::PROGRESSBAR::setValue(20);
+
 		przeciecia(wierzch_nowy, wnetrze_nowe);
+
+		UI::PROGRESSBAR::setValue(30);
 
 		std::set<INDEX_TYPE> vertices_to_remove;
 		std::vector<INDEX_TYPE> faces_to_remove;
 
 		qInfo() << "--- dziury w wierzchu...";
 		zamienPrzecieciaNaDziury2(wierzch_nowy.get(), wnetrze.get(), 10.0, CVector3d(0.0, 0.0, -1.0), vertices_to_remove);
+
+		UI::PROGRESSBAR::setValue(40);
+
 
 		qInfo() << QString("--- wierzcho�k�w do usuni�cia jest: %1").arg(vertices_to_remove.size());
 
@@ -2632,6 +2653,8 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 			}
 		}
 
+		UI::PROGRESSBAR::setValue(50);
+
 		qInfo() << QString("--- znaleziono: %1").arg(faces_to_remove.size());
 
 		qInfo() << QString("--- lb. scianek przed usuwaniem: %1").arg(wierzch_nowy->faces().size());
@@ -2644,6 +2667,8 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 			wierzch_nowy->removeFace(j);
 		}
 
+		UI::PROGRESSBAR::setValue(60);
+
 		qInfo() << QString("--- lb. scianek po usuwaniu: %1").arg(wierzch_nowy->faces().size());
 
 
@@ -2654,12 +2679,17 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 		wierzch_nowy->setLabel("wierzch_nowy");
 		//AP::WORKSPACE::addObject(wierzch_nowy);
 
+		UI::PROGRESSBAR::setValue(70);
+
 
 		vertices_to_remove.clear();
 		faces_to_remove.clear();
 
 		qInfo() << "--- dziury we wnetrzu...";
 		zamienPrzecieciaNaDziury2(wnetrze_nowe.get(), wierzch.get(), -10.0, CVector3d(0.0, 0.0, 1.0), vertices_to_remove);
+
+
+		UI::PROGRESSBAR::setValue(80);
 
 		qInfo() << QString("--- wierzcho�k�w do usuni�cia jest: %1").arg(vertices_to_remove.size());
 
@@ -2676,6 +2706,8 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 			}
 		}
 
+		UI::PROGRESSBAR::setValue(85);
+
 		qInfo() << QString("--- znaleziono: %1").arg(faces_to_remove.size());
 
 		qInfo() << QString("--- lb. scianek przed usuwaniem: %1").arg(wnetrze_nowe->faces().size());
@@ -2688,6 +2720,8 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 			wnetrze_nowe->removeFace(j);
 		}
 
+		UI::PROGRESSBAR::setValue(90);
+
 		qInfo() << QString("--- lb. scianek po usuwaniu: %1").arg(wnetrze_nowe->faces().size());
 
 		faces_to_remove.clear();
@@ -2699,9 +2733,15 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 		wnetrze_nowe->setLabel("wnetrze_nowe");
 		//AP::WORKSPACE::addObject(wnetrze_nowe);
 
+		UI::PROGRESSBAR::hide();
+
 		return { wierzch_nowy, wnetrze_nowe };
 	}
+
+	UI::PROGRESSBAR::hide();
+
 	return { nullptr, nullptr };
+
 }
 
 //------------------------------------------------------------------------------------------------------------------
@@ -2880,10 +2920,16 @@ std::shared_ptr<CMesh> scalSiatki(std::vector<std::shared_ptr<CMesh>> siatki)
 
 
 std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze) {
+
+	UI::PROGRESSBAR::init(0, 100, 0);
+	UI::PROGRESSBAR::setText("Bridging:");
+
 	if (wierzch && wnetrze)
 	{
 		wierzch->removeDuplicateVertices();
 		wnetrze->removeDuplicateVertices();
+
+		UI::PROGRESSBAR::setValue(10);
 
 		std::pair< std::vector<CVertex>, std::vector<CFace> > result;
 
@@ -2891,7 +2937,12 @@ std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, 
 		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> sz_bGraph;
 
 		findBoundaryEdgesWithDirection(wierzch->faces(), sz_ed, sz_bGraph);
+
+		UI::PROGRESSBAR::setValue(30);
+
 		std::vector<std::vector<INDEX_TYPE>> sz_loops = findBoundaryLoops(sz_bGraph);
+
+		UI::PROGRESSBAR::setValue(50);
 
 		auto sz_ae = std::make_shared<CAnnotationEdges>();
 
@@ -2906,8 +2957,12 @@ std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, 
 		std::vector<CEdge> ok_ed;
 		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> ok_bGraph;
 
+		UI::PROGRESSBAR::setValue(55);
+
 		findBoundaryEdgesWithDirection(wnetrze->faces(), ok_ed, ok_bGraph);
 		std::vector<std::vector<INDEX_TYPE>> ok_loops = findBoundaryLoops(ok_bGraph);
+
+		UI::PROGRESSBAR::setValue(65);
 
 		auto ok_ae = std::make_shared<CAnnotationEdges>();
 
@@ -2919,6 +2974,8 @@ std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, 
 		}
 
 		std::vector<std::shared_ptr<CMesh>> siatki;
+
+		UI::PROGRESSBAR::setValue(70);
 
 		for (auto l = 0; l < sz_loops.size(); l++) {
 
@@ -2938,12 +2995,18 @@ std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, 
 			siatki.push_back(mostki);
 		}
 
+		UI::PROGRESSBAR::setValue(90);
+
 		auto mesh1 = scalSiatki(siatki);
 
 		auto test = scalSiatki({ wierzch, wnetrze, mesh1 });
 
+		UI::PROGRESSBAR::hide();
+
 		return test;
 	}
+
+	UI::PROGRESSBAR::hide();
 
 	return nullptr;
 }
@@ -3069,11 +3132,16 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 {
 	// PLEASE NOTE: INDEX_TYPE is currently defined as uint32_t
 
+	UI::PROGRESSBAR::init(0,100,0);
+	UI::PROGRESSBAR::setText("Filling:");
+
+
 	std::vector<CEdge> boundaryEdges;
 	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> boundaryGraph;
 
 	findBoundaryEdgesWithDirection(faces, boundaryEdges, boundaryGraph);
 
+	UI::PROGRESSBAR::setValue(10);
 
 
 	//    CAnnotationEdges* ok_ae = new CAnnotationEdges();
@@ -3086,10 +3154,13 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 	}
 
 	//    AP::WORKSPACE::addObject(ok_ae);
+	UI::PROGRESSBAR::setValue(15);
 
 
 	auto loops = findBoundaryLoopsFromEdges(boundaryEdges);
 	qDebug() << "Znaleziono pętli:" << loops.size();
+
+	UI::PROGRESSBAR::setValue(25);
 
 	//auto loops = filterDisjointEdgeLoops(rawLoops);
 	//qDebug() << "Po filtracji:" << loops.size();
@@ -3097,8 +3168,12 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 	std::vector<CVertex> outVertices;
 	std::vector<CFace> outFaces;
 
+	UI::PROGRESSBAR::init(0, 25+loops.size(), 25);
+
 	int cnt = 0;
 	for (const auto& loop : loops) {
+		UI::PROGRESSBAR::setValue(25+cnt);
+
 		qInfo() << QString("loop: %1, size: %2").arg(cnt).arg(loop.size());
 		cnt++;
 
@@ -3150,6 +3225,8 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 			}
 		}
 	}
+
+	UI::PROGRESSBAR::hide();
 
 	return { outVertices, outFaces };
 }

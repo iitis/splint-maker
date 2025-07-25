@@ -174,13 +174,13 @@ public:
 	QPushButton* btStart23;
 
 	WidgetEtap123(QWidget* p = nullptr) : QWidget(p) {
-		insideDistLabel = new QLabel(QString::fromUtf8("rozepchanie wnetrza w mm"));
-		outsideDistLabel = new QLabel(QString::fromUtf8("rozepchanie wierzchu w mm"));
+		insideDistLabel = new QLabel(QString::fromUtf8("inner surface displacement [mm]"));
+		outsideDistLabel = new QLabel(QString::fromUtf8("outer surface displacement [mm]"));
 		insideDist = new QDoubleSpinBox();
 		insideDist->setValue(0.3);
 		outsideDist = new QDoubleSpinBox();
 		outsideDist->setValue(1.3);
-		btStart23 = new QPushButton(QString::fromUtf8("generuj powierzchnie"));
+		btStart23 = new QPushButton(QString::fromUtf8("CREATE SPLINT"));
 
 		QFormLayout* l = new QFormLayout(this);
 

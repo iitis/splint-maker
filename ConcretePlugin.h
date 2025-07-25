@@ -103,6 +103,8 @@ public:
 
 	// void etap_dekiel_cien();
 
+	void save_all();
+
 	void go_to_multisaver();
 
 	void etap_zapisz_wynik();
@@ -117,7 +119,7 @@ public:
 	void createE2Fmap(std::shared_ptr<CMesh> mesh, MapOfNewEdges& allEdges);
 	virtual bool onModelIndication(int objId) override;
 
-	std::shared_ptr<CMesh> stempelOnMesh(std::shared_ptr<CMesh> mesh);
+	std::shared_ptr<CMesh> stampFromMesh(std::shared_ptr<CMesh> mesh);
 
 	void onStempelButton();
 
