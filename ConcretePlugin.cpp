@@ -43,25 +43,13 @@ ConcretePlugin::ConcretePlugin(void)
 
 	symulator = nullptr;
 
-	m_workdir = L"../dane/";
-
 	m_cutPlane = nullptr;
-
-	//m_rzutnia = new CAnnotationPlane();
-	//m_rzutnia->setSize(80.0);
-	//m_rzutnia->setLabel(L"plaszczyzna rzutowania");
-	//m_rzutnia->setColor(CRGBA(0.6f, 0.6f, 0.5f, 0.7f));
 
 	m_divider = 10;
 
 	QObject::connect(this, &ConcretePlugin::setProgressBarValue, UI::PROGRESSBAR::instance(), &ProgressIndicator::setValue);
 }
 
-
-ConcretePlugin::~ConcretePlugin(void)
-{
-	//UI::MESSAGEBOX::error( L"I'm UNLOADED" );
-}
 
 
 std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szczeka, std::shared_ptr<CMesh>  zuchwa, double dist = 3.0)
@@ -311,7 +299,6 @@ void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 			moj_widget->przytnij_szczene->setEnabled(true);
 		}
 
-		m_workdir = QFileInfo(fileName).absolutePath().toStdWString();
 	}
 }
 
@@ -420,16 +407,8 @@ void ConcretePlugin::etap01(int div)
 	Eigen::Matrix4d mSz = CBaseObject::getGlobalTransformationMatrix(szcz);
 	Eigen::Matrix4d mOk = CBaseObject::getGlobalTransformationMatrix(oklu);
 	
-	//std::cout << mSz << endl;
-	//std::cout << mOk << endl;
-
 	symulator->szczeka_tworzMapeOkluzji2(oklu, mOk, mSz);
 	
-	//symulator->szczeka_okluzja->transform() = szcz->getGlobalTransformationMatrix();
-	//symulator->szczeka_okluzja->applyTransform();
-
-	//AP::mainApp().settings->value("plugins/nowaSzyna/cutPlane");
-
 	CBoundingBox bb = symulator->szczeka_obj->getBoundingBox();
 	CBoundingBox bbOk = symulator->szczeka_okluzja->getBoundingBox();
 
@@ -441,37 +420,12 @@ void ConcretePlugin::etap01(int div)
 
 		m_cutPlane->setCenter(bb.getMidpoint());
 
-
-		//CVector3d n1 = CVector3d(bb.getMidpoint(), bbOk.getMidpoint()).getNormalized();
-
-		//CVector3d n2 = CVector3d::ZAxis();
-
-		//if ((bb.dX() <= bb.dY()) && (bb.dX() <= bb.dZ())) {
-		//	n2 = CVector3d::XAxis();
-		//}
-		//else if ((bb.dY() <= bb.dX()) && (bb.dY() <= bb.dZ())) {
-		//	n2 = CVector3d::YAxis();
-		//}
-
-		//double il = n1.dotProduct(n2);
-
-		//if (il < 0) n2 = -n2;
-
 		CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka_okluzja->getData())->getMainNormalVector();
 		n2.x = 0.0;
 		n2.y = 0.0;
 
 		m_cutPlane->setNormal(n2);
 	}
-	//Eigen::Matrix4d M = szcz->getGlobalTransformationMatrix().inverse();
-	//CAnnotationPlane* pp = new CAnnotationPlane(m_cutPlane->get_transformed(M));
-	//pp->setSize(m_cutPlane->getSize());
-	//AP::WORKSPACE::addObject(pp);
-	//CModel3D* pp_par = (CModel3D*)pp->getParent();
-	//pp_par->transform() = szcz->getGlobalTransformationMatrix();
-
-	//m_rzutnia->setCenter(m_cutPlane->getCenter());
-	//m_rzutnia->setNormal(m_cutPlane->getNormal());
 
 	AP::MODEL::addAnnotation(symulator->szczeka_obj, m_cutPlane);
 	UI::updateAllViews();
@@ -489,63 +443,6 @@ void ConcretePlugin::etap01(int div)
 	moj_widget->setCursor(c);
 }
 
-
-//QMatrix4x4 rotation_matrix_from_vectors(CVector3d _n1, CVector3d _n2) {
-//	// Normalize vectors
-//	CVector3d n1 = _n1.getNormalized();
-//	CVector3d n2 = _n2.getNormalized();
-//
-//	// Angle of rotation (dot product)
-//	double cosTheta = n1.dotProduct(n2);
-//	double theta = acos(cosTheta);
-//
-//	// Check if vectors are anti-parallel
-//	if (std::abs(cosTheta + 1.0) < 1e-6) {
-//		// Find an orthogonal vector for the axis of rotation
-//		CVector3d ortho = n1.crossProduct(CVector3d(1, 0, 0));
-//		if (ortho.length() < 1e-6) { // If n1 is parallel to (1,0,0), use a different orthogonal vector
-//			ortho = n1.crossProduct(CVector3d(0, 1, 0));
-//		}
-//		ortho = ortho.getNormalized();
-//
-//		// 180 degree rotation matrix around orthogonal vector
-//		QMatrix4x4 R;
-//		double x = ortho.x;
-//		double y = ortho.y;
-//		double z = ortho.z;
-//		R(0, 0) = -1 + 2 * x * x;
-//		R(0, 1) = 2 * x * y;
-//		R(0, 2) = 2 * x * z;
-//		R(1, 0) = 2 * x * y;
-//		R(1, 1) = -1 + 2 * y * y;
-//		R(1, 2) = 2 * y * z;
-//		R(2, 0) = 2 * x * z;
-//		R(2, 1) = 2 * y * z;
-//		R(2, 2) = -1 + 2 * z * z;
-//		R(3, 3) = 1;
-//
-//		return R;
-//	}
-//
-//	// Axis of rotation (cross product)
-//	CVector3d k = n1.crossProduct(n2);
-//
-//	// Rodrigues' rotation formula components
-//	QMatrix4x4 K;
-//	K.setRow(0, QVector4D(0, -k.z, k.y, 0));
-//	K.setRow(1, QVector4D(k.z, 0, -k.x, 0));
-//	K.setRow(2, QVector4D(-k.y, k.x, 0, 0));
-//	K.setRow(3, QVector4D(0, 0, 0, 1));
-//
-//	// Identity matrix
-//	QMatrix4x4 I;
-//	I.setToIdentity();
-//
-//	// Compute R using Rodrigues' rotation formula
-//	QMatrix4x4 R = I + K * sin(theta) + K * K * (1 - cos(theta));
-//
-//	return R;
-//}
 
 QMatrix4x4 planeToTransform(CVector3d norm) {
 	QVector3D planeNormal(norm[0], norm[1], norm[2] );
@@ -589,7 +486,8 @@ QMatrix4x4 planeToTransform(CVector3d norm) {
 
 void ConcretePlugin::etap11()
 {
-	moj_widget->widget_info->setDisabled(true);
+	//moj_widget->widget_info->setDisabled(true);
+	moj_layout->removeRow(moj_widget->widget_info);
 
 	m_cutPlane->setSelfVisibility(false);
 	UI::updateAllViews();
@@ -670,7 +568,6 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 
 	moj_widget->info_zapis = new WidgetInfo({
 		QString::fromUtf8("You can save all the important meshes."),
-		// QString::fromUtf8("coś tu więcej napiszę jesli to będzie działało..."),
 		});
 	moj_widget->info_zapis->btStart->setText("LET'S DO IT");
 
@@ -682,8 +579,6 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 void ConcretePlugin::wytlaczanie()
 {
 	CObject::Children kids;
-
-	//moj_widget->info_koncowe->setDisabled(true);
 
 	for (const auto& kid : CWorkspace::instance()->children())
 	{
@@ -885,47 +780,6 @@ void ConcretePlugin::etap14()
 }
 
 
-void ConcretePlugin::go_to_exchange()
-{
-	std::list<std::shared_ptr<CBaseObject>> sel = AP::WORKSPACE::SELECTION::getObjList({CBaseObject::Type::MESH}, nullptr);
-
-	if (!sel.empty()) {
-		std::shared_ptr<CMesh> m = std::dynamic_pointer_cast<CMesh>(*sel.begin());
-
-
-		CObject::Children kids;
-
-		for (const auto& kid : AP::WORKSPACE::instance()->children())
-		{
-			kids[kid.first] = kid.second;
-		}
-
-		std::shared_ptr<CMesh> tmp = meshWithKeywordInLabel(QString("wierzch_mesh"), kids);
-		if (tmp != nullptr)
-		{
-			qInfo() << "Znaleziono: " << tmp->getLabel();
-			
-			m->setLabel("wierzch_mesh");
-			tmp->setLabel("old_wrzch_msh");
-
-			std::shared_ptr<CBaseObject> parentM = m->getParentPtr();
-
-			AP::OBJECT::removeChild(parentM, m);
-
-			std::shared_ptr<CBaseObject> parent = tmp->getParentPtr();
-
-			AP::OBJECT::removeChild(parent, tmp);
-
-			AP::OBJECT::addChild(parent, m);
-			AP::OBJECT::addChild(parentM, tmp);
-
-			//lbl->setText(m->getLabel());
-		}
-	}
-}
-
-//#include "FileConnector.h"
-
 void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 {
 	Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(m);
@@ -1032,234 +886,6 @@ void ConcretePlugin::save_all()
 
 
 
-
-
-void ConcretePlugin::go_to_multisaver()
-{
-	//qInfo() << CFileConnector::getSaveExts();
-
-	QFileInfo fi(AppSettings::mainSettings()->value("recentFile").toString());
-
-	QString init_path = QString("%1/calosc.obj").arg(fi.absoluteDir().absolutePath());
-
-	QString splint_path = UI::FILECHOOSER::getSaveFileName(QString("Wybierz plik zapisu szyny"), init_path, "OBJ File (*.obj)"); // CFileConnector::getSaveExts());
-
-
-	qInfo() << splint_path;
-
-	QFileInfo splint_info(splint_path);
-	QDir dir = splint_info.absoluteDir();
-	qInfo() << splint_info.completeSuffix();
-	qInfo() << dir.absolutePath();
-
-	//CParser *parser = CFileConnector::getSaveParser(splint_path);
-
-	//if (parser == nullptr) qInfo() << "brak parsera !!!";
-
-	CObject::Children kids;
-
-	for (const auto& kid : AP::WORKSPACE::instance()->children())
-	{
-		kids[kid.first] = kid.second;
-	}
-
-	// std::shared_ptr<CMesh>  tmp = meshWithKeywordInLabel("szyna_mesh", kids);
-	// if (tmp != nullptr)
-	// {
-	// 	qInfo() << "Znaleziono: " << tmp->getLabel();
-	// 	save_mesh(tmp, "calosc", splint_path);
-	// 	AppSettings::mainSettings()->setValue("recentFile", splint_path);
-	// }
-
-	auto tmp = meshWithKeywordInLabel(QString("wierzch_mesh"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "wierzch", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wierzch").arg(splint_info.completeSuffix()));
-	}
-
-	// tmp = meshWithKeywordInLabel(QString("wierzchBD_mesh"), kids);
-	// if (tmp != nullptr)
-	// {
-	// 	qInfo() << "Znaleziono: " << tmp->getLabel();
-	// 	save_mesh(tmp, "wierzch_bez_okluzji", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wierzch_bez_okluzji").arg(splint_info.completeSuffix()));
-	// }
-
-	// tmp = meshWithKeywordInLabel(QString("wierzchZD_mesh"), kids);
-	// if (tmp != nullptr)
-	// {
-	// 	qInfo() << "Znaleziono: " << tmp->getLabel();
-	// 	save_mesh(tmp, "wierzch_dziurawy", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wierzch_dziurawy").arg(splint_info.completeSuffix()));
-	// }
-
-	tmp = meshWithKeywordInLabel(QString("wnetrze_mesh"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "wnetrze", QString("%1/%2.%3").arg(dir.absolutePath()).arg("wnetrze").arg(splint_info.completeSuffix()));
-	}
-
-	tmp = meshWithKeywordInLabel(QString("testowa zuchwa"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "zuchwa", QString("%1/%2.%3").arg(dir.absolutePath()).arg("zuchwa").arg(splint_info.completeSuffix()));
-	}
-
-	tmp = meshWithKeywordInLabel(QString("szczeka_mesh"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "szczeka", QString("%1/%2.%3").arg(dir.absolutePath()).arg("szczeka").arg(splint_info.completeSuffix()));
-	}
-
-	tmp = meshWithKeywordInLabel(QString("okluzja_mesh"), kids);
-	if (tmp != nullptr)
-	{
-		qInfo() << "Znaleziono: " << tmp->getLabel();
-		save_mesh(tmp, "okluzja", QString("%1/%2.%3").arg(dir.absolutePath()).arg("okluzja").arg(splint_info.completeSuffix()));
-	}
-
-	//delete parser;
-
-	qInfo() << "Zapisano.";
-	UI::STATUSBAR::setText(QString::fromUtf8("ZAPISANO - sprawdź czy wsystko jest zanim skasujesz"));
-}
-
-// void ConcretePlugin::etap_dekiel_cien()
-// {
-// 	moj_widget->etap15->setDisabled(true);
-	
-// 	QCursor c = moj_widget->cursor();
-// 	c.setShape(Qt::CursorShape::WaitCursor);
-// 	moj_widget->setCursor(c);
-
-// 	std::shared_ptr<CMesh> wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
-// 	std::shared_ptr<CMesh> wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
-// 	//CVector3d ray = -m_rzutnia_copy->getNormal();
-// 	CVector3d ray = -m_cutPlane->getNormal();
-
-// 	calosc = dekiel_cien(wierzch, wnetrze, ray);
-	
-
-
-// 	UI::STATUSBAR::setText(L"Prawdopodobnie gotowe !");
-
-// 	moj_widget->info_zapis = new WidgetInfo({
-// 		QString::fromUtf8("W tym miejscu mozesz sobie zapisać ważniejsze siatki."),
-// 		QString::fromUtf8("coś tu więcej napiszę jesli to będzie działało..."),
-// 		});
-// 	moj_widget->info_zapis->btStart->setText("ZAPISZ");
-
-// 	moj_layout->addRow(moj_widget->info_zapis);
-
-// 	QObject::connect(moj_widget->info_zapis->btStart, &QPushButton::clicked, [&]() {
-// 		go_to_multisaver();
-// 		});
-
-
-// 	moj_widget->info_koncowe = new WidgetInfo({
-// 		QString::fromUtf8("Zrobione."),
-// 		QString::fromUtf8("Szyna powinna być widoczna w oknie po lewej pod nazwą \"całość\"."),
-// 		QString::fromUtf8("Niestety aby znów skorzystać z wtyczki musisz uruchomić program ponownie."),
-// 		QString::fromUtf8("It's not a bug, it's the feature..."),
-// 		});
-// 	moj_widget->info_koncowe->btStart->setText("KONIEC");
-
-// 	moj_layout->addRow(moj_widget->info_koncowe);
-
-// 	QObject::connect(moj_widget->info_koncowe->btStart, &QPushButton::clicked, [&]() {
-// 		qInfo() << "TEST 1";
-// 		etap_zapisz_wynik(); 
-// 	});
-
-// 	c.setShape(Qt::CursorShape::ArrowCursor);
-// 	moj_widget->setCursor(c);
-// }
-
-void ConcretePlugin::etap_zapisz_wynik()
-{
-	qInfo() << "TEST 2";
-
-	if (szcz_parent != nullptr)
-	{
-		if (calosc->getParent() != nullptr)
-			AP::OBJECT::removeChild(calosc->getParentPtr(), calosc);
-		
-		calosc->removeAllChilds();
-
-		calosc->setLabel("szyna");
-
-		
-		if (szcz->hasKeyword("new_upper")) {
-			szcz_parent = std::dynamic_pointer_cast<CModel3D>(szcz->getParentPtr());
-		}
-		else {
-			CTransform nullT;
-			CTransform szT(CBaseObject::getGlobalTransformationMatrix(szcz).inverse());
-
-			calosc->applyTransformation(szT, nullT);
-			mesh_wierzch->applyTransformation(szT, nullT);
-			mesh_wnetrze->applyTransformation(szT, nullT);
-		}
-
-		AP::OBJECT::addChild(szcz_parent, calosc);
-
-		/*********************************************************************/
-
-		if (mesh_wierzch->getParent() != nullptr)
-			AP::OBJECT::removeChild(mesh_wierzch->getParentPtr(), mesh_wierzch);
-
-		mesh_wierzch->removeAllChilds();
-
-		mesh_wierzch->setLabel("wierzch");
-
-
-		AP::OBJECT::addChild(szcz_parent, mesh_wierzch);
-
-		/*********************************************************************/
-
-		if (mesh_wnetrze->getParent() != nullptr)
-			AP::OBJECT::removeChild(mesh_wnetrze->getParentPtr(), mesh_wnetrze);
-
-		mesh_wnetrze->removeAllChilds();
-
-		mesh_wnetrze->setLabel("wnetrze");
-
-
-		AP::OBJECT::addChild(szcz_parent, mesh_wnetrze);
-
-	}
-
-	std::shared_ptr<CModel3D> top_model = top_model_arch;
-
-	CWorkspace::Children w = AP::WORKSPACE::instance()->children();
-
-	for (auto &p : w)
-	{
-		if (p.second != top_model)
-		{
-			AP::WORKSPACE::removeModel(p.second);
-			p.second = nullptr;
-		}
-	}
-
-	AP::WORKSPACE::addModel(top_model);
-
-	waiting_for = CzekamNa::Nic;
-	szcz = nullptr;
-	oklu = nullptr;
-	zuch = nullptr;
-	szcz_parent = nullptr;
-	top_model_arch = nullptr;
-	mesh_wierzch = nullptr;
-	mesh_wnetrze = nullptr;
-	calosc = nullptr;
-
-	UI::PLUGINPANEL::clear(m_ID);
-	showMainPanel();
-}
-
 void ConcretePlugin::showMainPanel()
 {
 	panel = UI::PLUGINPANEL::instance(m_ID);
@@ -1310,14 +936,6 @@ void ConcretePlugin::showMainPanel()
 			sz2->setLabel(QString("szczeka po przycieciu"));
 			sz2->calcFN();
 
-			//CModel3D* obj2 = new CModel3D();
-			//obj2->addChild(sz2);
-			//obj2->importChildrenGeometry();
-			//obj2->setLabel("SZCZEKA");
-			//obj2->setTransform(tSz);
-			////obj2->calcVN();
-			//AP::WORKSPACE::addModel(obj2);
-
 			AP::OBJECT::addChild(szcz_parent, sz2);
 
 			if (sz2) {
@@ -1354,71 +972,12 @@ void ConcretePlugin::onLoad()
 	showMainPanel();
 }
 
-void ConcretePlugin::onUnload()
-{
-	//delete symulator;
-}
-
-
-void ConcretePlugin::run(void)
-{
-}
 
 #include "AnnotationPoint.h"
 #include "AnnotationPoints.h"
 #include "AnnotationPath.h"
 #include "AnnotationPath.h"
 #include "AnnotationVPath.h"
-
-
-void ConcretePlugin::znajdzWierzcholkiBrzegowe(std::shared_ptr<CMesh>  mesh, std::set<unsigned int>& boundaryVertices)
-{
-	CMesh::Edges bound;
-	mesh->findBoundaryEdges(bound);
-
-	boundaryVertices.clear();
-
-	for (auto e : bound)
-	{
-		boundaryVertices.insert(e.first);
-		boundaryVertices.insert(e.second);
-	}
-}
-
-std::shared_ptr<CMesh> ConcretePlugin::zrzutujNaPlaszczyzne(std::shared_ptr<CMesh> mesh, CPlane &cutPlane, CVector3d ray)
-{
-	std::set<unsigned int> boundaryVertices;
-
-	znajdzWierzcholkiBrzegowe(mesh, boundaryVertices);
-
-	std::shared_ptr<CMesh> rzut = std::dynamic_pointer_cast<CMesh>(mesh->getCopy());
-	for (unsigned int i=0; i<rzut->vertices().size(); i++)
-	{
-		if (boundaryVertices.find(i) == boundaryVertices.end())
-		{
-			CVertex& v = rzut->vertices()[i];
-			CPoint3d rzut;
-
-			if (cutPlane.rayIntersection(v, ray, 30, rzut))
-				v.Set(rzut);
-		}
-	}
-	return rzut;
-}
-
-std::shared_ptr<CModel3D> ConcretePlugin::dodajMeshDoProjektu(std::shared_ptr<CMesh>  mesh, QString label)
-{
-	auto nowyModel = std::make_shared<CModel3D>();
-	nowyModel->addChild(nowyModel, mesh);
-	nowyModel->setMin(mesh->getMin());
-	nowyModel->setMax(mesh->getMax());
-
-	nowyModel->setLabel(label);
-
-	AP::WORKSPACE::addModel(nowyModel);
-
-	return nowyModel;
-}
 
 
 std::shared_ptr<CMesh>  ConcretePlugin::scalMeshe(std::shared_ptr<CMesh>  mesh1, std::shared_ptr<CMesh>  mesh2, bool invert)
@@ -1455,230 +1014,6 @@ std::shared_ptr<CMesh>  ConcretePlugin::scalMeshe(std::shared_ptr<CMesh>  mesh1,
 	return calosc;
 }
 
-
-int ConcretePlugin::usunWadliweScianki(std::shared_ptr<CMesh>  mesh)
-{
-	std::set<unsigned int> anormalfaces;
-
-	for (int j = 0; j < mesh->faces().size(); j++)
-	{
-		CFace& f = mesh->faces()[j];
-		if ((f.A() == f.B()) || (f.B() == f.C()) || (f.C() == f.A()))
-		{
-			//UI::MESSAGEBOX::error(L"scianka z dwoma jednakowymi wierzchołkami", mesh->getLabel());
-
-			anormalfaces.insert(j);
-		}
-	}
-
-	for (std::set<unsigned int>::reverse_iterator rit = anormalfaces.rbegin(); rit != anormalfaces.rend(); rit++)
-	{
-		mesh->removeFace(*rit);
-	}
-
-	int result = anormalfaces.size();
-	anormalfaces.clear();
-
-	return result;
-}
-
-void ConcretePlugin::wytnijDekiel2(std::shared_ptr<CMesh>  rzutWierzchu, std::shared_ptr<CMesh>  wnetrze)
-{
-	double dist = m_divider / 2.0;// 0.05;
-
-	std::set<unsigned int> boundaryVertices1;
-	znajdzWierzcholkiBrzegowe(rzutWierzchu, boundaryVertices1);
-
-	std::set<unsigned int> boundaryVertices2;
-	znajdzWierzcholkiBrzegowe(wnetrze, boundaryVertices2);
-
-	std::set<unsigned int> verticesToRemove;
-	std::set<unsigned int> doNotTouch;
-
-	//CVector3d ray = -m_rzutnia_copy->getNormal();
-	CVector3d ray = -m_cutPlane->getNormal();
-
-	for (auto i : boundaryVertices2)
-	{
-		CVertex& v = wnetrze->vertices()[i];
-
-		int idx = rzutWierzchu->getKDtree(CPointCloud::KDtree::PRESERVE).closest_to_pt(v);
-
-		if (idx >= 0) 
-		{
-			doNotTouch.insert(idx);
-			wnetrze->vertices()[i] = rzutWierzchu->vertices()[idx];
-		}
-	}
-
-	for (unsigned int i = 0; i < wnetrze->vertices().size(); i++)
-	{
-		UI::STATUSBAR::printfTimed(500, L"wycinanie dekla, pęla2. i = %d", i);
-		CVertex v = wnetrze->vertices()[i];
-		CPoint3d rzut = v;
-
-		bool brzeg = boundaryVertices2.find(i) != boundaryVertices2.end();
-
-		if (!brzeg)
-		{
-			if ( m_cutPlane->rayIntersection(v, ray, 30, rzut) )
-				v = rzut;
-		}
-
-		int idx = rzutWierzchu->getKDtree(CPointCloud::KDtree::PRESERVE).closest_to_pt(v, dist);
-
-		if (idx >= 0)
-		{
-			if (doNotTouch.find(idx) == doNotTouch.end())
-			{
-				verticesToRemove.insert(idx);
-			}
-		}
-	}
-
-	for (long j = rzutWierzchu->faces().size() - 1; j >= 0; j--)
-	{
-		CFace f = rzutWierzchu->faces()[j];
-
-		if ((verticesToRemove.find(f.A()) != verticesToRemove.end()) ||
-			(verticesToRemove.find(f.B()) != verticesToRemove.end()) ||
-			(verticesToRemove.find(f.C()) != verticesToRemove.end()))
-		{
-			rzutWierzchu->removeFace(j);
-		}
-	}
-
-	rzutWierzchu->removeUnusedVertices();
-
-
-}
-
-
-
-std::shared_ptr<CMesh>  ConcretePlugin::dekiel_cien( std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze, CVector3d ray )
-{
-	usunWadliweScianki(wnetrze);
-	usunWadliweScianki(wierzch);
-
-	wierzch->removeDuplicateVertices();
-	wnetrze->removeDuplicateVertices();
-
-
-	std::shared_ptr<CMesh> rzutWierzchu = zrzutujNaPlaszczyzne( wierzch, *m_cutPlane, ray);
-	dodajMeshDoProjektu(rzutWierzchu, "dekiel z wierzchu");
-
-
-//	std::shared_ptr<CMesh>  rzutWnetrza = zrzutujNaPłaszczyznę(wnetrze, m_cutPlane, ray);
-//	dodajMeshDoProjektu(rzutWnetrza, L"dekiel z wnetrza");
-
-	//rzutWierzchu->removeDuplicateVertices();
-	//rzutWnetrza->removeDuplicateVertices();
-	
-	usunWadliweScianki(rzutWierzchu);
-//	usunWadliweScianki(rzutWnetrza);
-
-
-	wytnijDekiel2(rzutWierzchu, wnetrze);
-
-	rzutWierzchu->removeDuplicateVertices();
-	wnetrze->removeDuplicateVertices();
-
-	usunWadliweScianki(wnetrze);
-	usunWadliweScianki(rzutWierzchu);
-
-	std::shared_ptr<CMesh>  wierzchZdeklem = scalMeshe(wierzch, rzutWierzchu, true);
-	dodajMeshDoProjektu(wierzchZdeklem, "wierzch z deklem");
-
-
-	std::shared_ptr<CMesh>  calosc = scalMeshe(wierzchZdeklem, wnetrze);
-	dodajMeshDoProjektu(calosc, QString::fromUtf8("całość"));
-	calosc->setLabel("szyna_mesh");
-
-	//AP::WORKSPACE::addObject(calosc);
-
-	usunWadliweScianki(calosc);
-
-
-	////////////////////////////////////////////////////////////////////
-
-
-	MapOfNewEdges allEdges;
-
-	createE2Fmap(calosc, allEdges);
-
-	std::set<INDEX_TYPE> facesToRemove;
-
-	for (const auto& e : allEdges)
-	{
-		if (e.second.size() > 2)
-		{
-			for (auto idxf : e.second)
-			{
-				CFace f = calosc->faces()[idxf];
-
-				MapOfNewEdges::iterator i1 = allEdges.find(f.A(), f.B());
-				MapOfNewEdges::iterator i2 = allEdges.find(f.B(), f.C());
-				MapOfNewEdges::iterator i3 = allEdges.find(f.C(), f.A());
-
-				if ((i1->second.size() < 2) || (i2->second.size() < 2) || (i3->second.size() < 2))
-				{
-					facesToRemove.insert(idxf);
-				}
-			}
-		}
-	}
-
-	for (long j = calosc->faces().size() - 1; j >= 0; j--)
-	{
-		if (facesToRemove.find(j) != facesToRemove.end())
-		{
-			calosc->removeFace(j);
-		}
-	}
-
-	calosc->removeUnusedVertices();
-
-	return calosc;
-}
-
-
-void ConcretePlugin::createE2Fmap(std::shared_ptr<CMesh> mesh, MapOfNewEdges& allEdges)
-{
-	for (unsigned int j = 0; j < mesh->faces().size(); j++)
-	{
-		CFace f = mesh->faces()[j];
-
-		MapOfNewEdges::iterator it = allEdges.find(f.A(), f.B());
-		if (it == allEdges.end())
-		{
-			allEdges[NewEdge::first_type(f.A(), f.B())].insert(j);
-		}
-		else
-		{
-			it->second.insert(j);
-		}
-
-		it = allEdges.find(f.B(), f.C());
-		if (it == allEdges.end())
-		{
-			allEdges[NewEdge::first_type(f.B(), f.C())].insert(j);
-		}
-		else
-		{
-			it->second.insert(j);
-		}
-
-		it = allEdges.find(f.C(), f.A());
-		if (it == allEdges.end())
-		{
-			allEdges[NewEdge::first_type(f.C(), f.A())].insert(j);
-		}
-		else
-		{
-			it->second.insert(j);
-		}
-	}
-}
 
 
 bool ConcretePlugin::onModelIndication(int objId)
@@ -2211,7 +1546,8 @@ std::shared_ptr<CMesh> ConcretePlugin::stampFromMesh(std::shared_ptr<CMesh> mesh
 	if (mesh)
 	{
 		// rasteryzacja -> wokselowy odpowiednik siatki
-		vox_okluzja = rasterizeMeshToVoxels(mesh->vertices(), mesh->faces(), 0.1);
+		VoxelGrid vox_okluzja = rasterizeMeshToVoxels(mesh->vertices(), mesh->faces(), 0.1);
+		VoxelGrid vox_stempel;
 
 		createStempel(vox_okluzja, vox_stempel);
 
@@ -2233,19 +1569,6 @@ std::shared_ptr<CMesh> ConcretePlugin::stampFromMesh(std::shared_ptr<CMesh> mesh
 	return nullptr;
 }
 
-
-void ConcretePlugin::onStempelButton() {
-	auto sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
-
-	if (sel.size() > 0)
-	{
-		auto isel = sel.begin();
-
-		auto mesh = std::dynamic_pointer_cast<CMesh>(*isel);
-
-		stampFromMesh(mesh);
-	}
-}
 
 //--------------------------------------------------------------------
 
@@ -2328,28 +1651,6 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 	//	UI::updateAllViews();
 }
 
-
-
-void ConcretePlugin::onOdciskStemplaButton(double distMax)
-{
-	qInfo() << "odcisk stempla";
-	auto sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
-
-	if (sel.size() > 0)
-	{
-		auto isel = sel.begin();
-
-		auto wierzch = std::dynamic_pointer_cast<CMesh>((*isel)->getCopy());
-		wierzch->setParent(nullptr);
-		isel++;
-		auto stempel = std::dynamic_pointer_cast<CMesh>((*isel)->getCopy());
-		stempel->setParent(nullptr);
-
-		zrobOdciskStempla(wierzch, stempel, distMax);
-
-		AP::WORKSPACE::addObject(wierzch);
-	}
-}
 
 
 
@@ -2481,131 +1782,6 @@ void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVe
 
 
 
-void ConcretePlugin::onZrobDziuryButton()
-{
-	qInfo() << "robimy dziury, Hej!!!";
-	auto sel = AP::WORKSPACE::SELECTION::getObjList({ CObject::Type::MESH });
-
-	if (sel.size() > 0)
-	{
-		auto isel = sel.begin();
-
-		auto wierzch = std::dynamic_pointer_cast<CMesh>(*isel);
-		auto wierzch_nowy = std::dynamic_pointer_cast<CMesh>(wierzch->getCopy());
-		wierzch_nowy->setParent(nullptr);
-		wierzch_nowy->removeDuplicateVertices();
-
-		isel++;
-
-		auto wnetrze = std::dynamic_pointer_cast<CMesh>(*isel);
-		auto wnetrze_nowe = std::dynamic_pointer_cast<CMesh>(wnetrze->getCopy());
-		wnetrze_nowe->setParent(nullptr);
-		wnetrze_nowe->removeDuplicateVertices();
-
-
-		przeciecia(wierzch_nowy, wnetrze_nowe);
-
-
-
-		std::set<INDEX_TYPE> vertices_to_remove;
-		std::vector<INDEX_TYPE> faces_to_remove;
-
-
-
-		qInfo() << "--- dziury w wierzchu...";
-		zamienPrzecieciaNaDziury2(wierzch_nowy.get(), wnetrze.get(), 10.0, CVector3d(0.0, 0.0, -1.0), vertices_to_remove);
-
-		qInfo() << QString("--- wierzcho�k�w do usuni�cia jest: %1").arg(vertices_to_remove.size());
-
-		qInfo() << "--- usuwanie nadmiarowych scianek...";
-
-		for (INDEX_TYPE j = 0; j < wierzch_nowy->faces().size(); j++) {
-			CFace& f = wierzch_nowy->faces()[j];
-
-			if ((vertices_to_remove.find(f.A()) != vertices_to_remove.end()) ||
-				(vertices_to_remove.find(f.B()) != vertices_to_remove.end()) ||
-				(vertices_to_remove.find(f.C()) != vertices_to_remove.end()))
-			{
-				faces_to_remove.push_back(j);
-			}
-		}
-
-		qInfo() << QString("--- znaleziono: %1").arg(faces_to_remove.size());
-
-		qInfo() << QString("--- lb. scianek przed usuwaniem: %1").arg(wierzch_nowy->faces().size());
-		qInfo() << QString("--- lb. wierzcholkow przed usuwaniem: %1").arg(wierzch_nowy->vertices().size());
-
-		// na wszelki wypadek, �eby miec pewno��, �e indeksy s� malej�co
-		std::sort(faces_to_remove.begin(), faces_to_remove.end(), std::greater<INDEX_TYPE>());
-
-		for (INDEX_TYPE j : faces_to_remove) {
-			wierzch_nowy->removeFace(j);
-		}
-
-		qInfo() << QString("--- lb. scianek po usuwaniu: %1").arg(wierzch_nowy->faces().size());
-
-
-		wierzch_nowy->removeUnusedVertices();
-
-		qInfo() << QString("--- lb. wierzcholkow po usuwaniu: %1").arg(wierzch_nowy->vertices().size());
-
-		wierzch_nowy->setLabel("wierzch_nowy");
-		AP::WORKSPACE::addObject(wierzch_nowy);
-
-
-
-
-
-
-		vertices_to_remove.clear();
-		faces_to_remove.clear();
-
-
-
-		qInfo() << "--- dziury we wnetrzu...";
-		zamienPrzecieciaNaDziury2(wnetrze_nowe.get(), wierzch.get(), -10.0, CVector3d(0.0, 0.0, 1.0), vertices_to_remove);
-
-		qInfo() << QString("--- wierzcho�k�w do usuni�cia jest: %1").arg(vertices_to_remove.size());
-
-		qInfo() << "--- usuwanie nadmiarowych scianek...";
-
-		for (INDEX_TYPE j = 0; j < wnetrze_nowe->faces().size(); j++) {
-			CFace& f = wnetrze_nowe->faces()[j];
-
-			if ((vertices_to_remove.find(f.A()) != vertices_to_remove.end()) ||
-				(vertices_to_remove.find(f.B()) != vertices_to_remove.end()) ||
-				(vertices_to_remove.find(f.C()) != vertices_to_remove.end()))
-			{
-				faces_to_remove.push_back(j);
-			}
-		}
-
-		qInfo() << QString("--- znaleziono: %1").arg(faces_to_remove.size());
-
-		qInfo() << QString("--- lb. scianek przed usuwaniem: %1").arg(wnetrze_nowe->faces().size());
-		qInfo() << QString("--- lb. wierzcholkow przed usuwaniem: %1").arg(wnetrze_nowe->vertices().size());
-
-		// na wszelki wypadek, �eby miec pewno��, �e indeksy s� malej�co
-		std::sort(faces_to_remove.begin(), faces_to_remove.end(), std::greater<INDEX_TYPE>());
-
-		for (INDEX_TYPE j : faces_to_remove) {
-			wnetrze_nowe->removeFace(j);
-		}
-
-		qInfo() << QString("--- lb. scianek po usuwaniu: %1").arg(wnetrze_nowe->faces().size());
-
-		faces_to_remove.clear();
-
-		wnetrze_nowe->removeUnusedVertices();
-
-		qInfo() << QString("--- lb. wierzcholkow po usuwaniu: %1").arg(wnetrze_nowe->vertices().size());
-
-		wnetrze_nowe->setLabel("wnetrze_nowe");
-		AP::WORKSPACE::addObject(wnetrze_nowe);
-	}
-}
-
-
 std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze)
 {
 	UI::PROGRESSBAR::init(0, 100, 0);
@@ -2627,7 +1803,8 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 
 		przeciecia(wierzch_nowy, wnetrze_nowe);
 
-		UI::PROGRESSBAR::setValue(30);
+		UI::PROGRESSBAR::init(0, 30, 0);
+		UI::PROGRESSBAR::setText("Making holes:");
 
 		std::set<INDEX_TYPE> vertices_to_remove;
 		std::vector<INDEX_TYPE> faces_to_remove;
