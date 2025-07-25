@@ -829,4 +829,3 @@ void CSiateczka1::usunNadmiaroweScianki()
 
 	UI::updateAllViews();
 }
-
