@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -145,10 +145,12 @@
     </ClCompile>
     <ClCompile Include="Siateczka1.cpp" />
     <ClCompile Include="BiteSim.cpp" />
+    <ClCompile Include="VoxelGrid.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="VoxelGrid.h" />
     <QtMoc Include="ConcretePlugin.h" />
-    <QtMoc Include="..\..\dpVision\src\core\ProgressIndicator.h" />
+    <QtMoc Include="..\..\dpVision\src\gui\ProgressIndicator.h" />
     <ClInclude Include="CollisionDetector.h" />
     <ClInclude Include="CollisionDetector_definitions.h" />
     <QtMoc Include="moje_widgety.h" />
@@ -170,7 +172,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <QtUic Include="..\..\dpVision\src\core\ProgressIndicator.ui" />
+    <QtUic Include="..\..\dpVision\src\gui\ProgressIndicator.ui" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

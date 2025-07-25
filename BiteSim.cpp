@@ -1,8 +1,7 @@
 #include "BiteSim.h"
 #include "AnnotationEdges.h"
 
-//#include "../api/UI.h"
-#include "UI.h"
+#include "../api/UI.h"
 
 void BiteSim::create_inner_surface(CSiateczka1* wnetrze, float d)
 {
@@ -38,9 +37,13 @@ void BiteSim::create_inner_surface(CSiateczka1* wnetrze, float d)
 
 	wnetrze->klejDziury3();
 
+
 	wnetrze->usunNadmiaroweScianki();
 
+	qInfo() << "TEST1";
+
 	wnetrze->odwrocNormalne();
+	qInfo() << "TEST2";
 }
 
 
@@ -75,155 +78,9 @@ void BiteSim::create_outer_surface(double dVal, std::shared_ptr<CMesh> zuch)
 	// wyciskam rozepchana powierzchnie szczęki + powierzchnie okluzji
 	wierzch->zrobWyciskSumy4(szczeka_zeby, szczeka_okluzja, false);
 
-	// wyciskam żuchwę, żeby usunąć potencjalnie wystajace fragmenty
-	//wierzch->zrobWyciskZuchwy_v1((CModel3D*)zuch->getParent(), 0.0, 1);
-
 	wierzch->klejDziury3();
 	wierzch->usunNadmiaroweScianki();
-
-
-
-	// *** AKTUALNIE INTERESUJE NAS TYLKO ŁĄCZNY WYCISK SZCZEKI+OKLUZJI
-	// 
-	//CSiateczka1* wierzch_bez_dziury = new CSiateczka1(80, 80, 30, m_divider); // arguments: sizeX, sizeY, depth, divider
-
-	//if ((NULL == wierzch_bez_dziury) || (NULL == wierzch_bez_dziury->obj)) return;
-
-	//wierzch_bez_dziury->obj->setName(L"wierzch bez dziury");
-	//wierzch_bez_dziury->obj->getTransform() = wnetrze->obj->getTransform();
-	//wierzch_bez_dziury->obj->getData()->setLabel("wierzchBD_mesh");
-	//AP::WORKSPACE::addModel(wierzch_bez_dziury->obj);
-
-	//wierzch_bez_dziury->zbudujSiatke(szczeka_zeby);
-
-	//// wyciskam rozepchana powierzchnie szczęki bez okluzji
-	//wierzch_bez_dziury->zrobWyciskSumy4(szczeka_zeby);
-
-	//wierzch_bez_dziury->klejDziury3();
-	//wierzch_bez_dziury->usunNadmiaroweScianki();
-
-	//mBD = std::dynamic_pointer_cast<CMesh>(wierzch_bez_dziury->obj->getData());
-
-
-
-	// *** AKTUALNIE NIE ROBIMY WYCISKU Z DZIURAMI
-	// 
-	//CSiateczka1* wierzch_z_dziurom = new CSiateczka1(80, 80, 30, m_divider); // arguments: sizeX, sizeY, depth, divider
-
-	//if ((NULL == wierzch_z_dziurom) || (NULL == wierzch_z_dziurom->obj)) return;
-
-	//wierzch_z_dziurom->obj->setLabel(L"wierzch z dziurom");
-	//wierzch_z_dziurom->obj->getTransform() = wnetrze->obj->getTransform();
-	//wierzch_z_dziurom->obj->getData()->setLabel("wierzchZD_mesh");
-	//AP::WORKSPACE::addModel(wierzch_z_dziurom->obj);
-
-	//wierzch_z_dziurom->zbudujSiatke(szczeka_zeby);
-
-	//// wyciskam rozepchana powierzchnie szczęki i robię dziurę za pomocą okluzji
-
-	//wierzch_z_dziurom->zrob_wycisk_z_dziurom(szczeka_zeby, szczeka_okluzja);
-
-	//wierzch_z_dziurom->klejDziury3();
-	//wierzch_z_dziurom->usunNadmiaroweScianki();
-
-	//mZD = std::dynamic_pointer_cast<CMesh>(wierzch_z_dziurom->obj->getData());
 }
-
-//
-//void BiteSim::generujWierzchOdRazu3_CSiateczka1(double dVal, std::shared_ptr<CMesh> zuch)
-//{
-//	zuch->setLabel("testowa zuchwa");
-//
-//	wierzch = new CSiateczka1(80, 80, 30, m_divider); // arguments: sizeX, sizeY, depth, divider
-//
-//	if ((NULL == wierzch) || (NULL == wierzch->obj)) return;
-//
-//	wierzch->obj->setName(L"wierzch");
-//	wierzch->obj->getTransform() = wnetrze->obj->getTransform();
-//	wierzch->obj->getData()->setLabel("wierzch_mesh");
-//	AP::WORKSPACE::addModel(wierzch->obj);
-//
-//
-//
-//	AP::WORKSPACE::removeModel(szczeka_zeby);
-//
-//	szczeka_zeby = std::dynamic_pointer_cast<CModel3D>(szczeka_oryginalneOdcieteZeby->getCopy());
-//	szczeka_rozepchajZeby(dVal);
-//
-//	szczeka_zeby->getData()->setLabel(QString("rozepch2"));
-//	szczeka_zeby->getData()->addKeyword(QString("dVal=%1").arg(dVal));
-//	QString val = QString::number(dVal).replace(".", "_");
-//	szczeka_zeby->setLabel(QString("rozepchane_%1").arg(val));
-//	AP::WORKSPACE::addModel(szczeka_zeby);
-//
-//
-//	wierzch->zbudujSiatke(szczeka_zeby);
-//
-//	// wyciskam rozepchana powierzchnie szczęki + powierzchnie okluzji
-//	wierzch->zrobWyciskSumy4(szczeka_zeby, szczeka_okluzja, true);
-//
-//	// wyciskam żuchwę, żeby usunąć potencjalnie wystajace fragmenty
-//	wierzch->zrobWyciskZuchwy_v1(std::dynamic_pointer_cast<CModel3D>(zuch->getParentPtr()), 0.0, 1);
-//
-//	wierzch->klejDziury3();
-//	wierzch->usunNadmiaroweScianki();
-//
-//
-//
-//	CSiateczka1* wierzch_bez_dziury = new CSiateczka1(80, 80, 30, m_divider); // arguments: sizeX, sizeY, depth, divider
-//
-//	if ((NULL == wierzch_bez_dziury) || (NULL == wierzch_bez_dziury->obj)) return;
-//
-//	wierzch_bez_dziury->obj->setName(L"wierzch bez dziury");
-//	wierzch_bez_dziury->obj->getTransform() = wnetrze->obj->getTransform();
-//	wierzch_bez_dziury->obj->getData()->setLabel("wierzchBD_mesh");
-//	AP::WORKSPACE::addModel(wierzch_bez_dziury->obj);
-//
-//	wierzch_bez_dziury->zbudujSiatke(szczeka_zeby);
-//
-//	// wyciskam rozepchana powierzchnie szczęki bez okluzji
-//	wierzch_bez_dziury->zrobWyciskSumy4(szczeka_zeby);
-//
-//	wierzch_bez_dziury->klejDziury3();
-//	wierzch_bez_dziury->usunNadmiaroweScianki();
-//
-//	mBD = std::dynamic_pointer_cast<CMesh>(wierzch_bez_dziury->obj->getData());
-//
-//	CSiateczka1* wierzch_z_dziurom = new CSiateczka1(80, 80, 30, m_divider); // arguments: sizeX, sizeY, depth, divider
-//
-//	if ((NULL == wierzch_z_dziurom) || (NULL == wierzch_z_dziurom->obj)) return;
-//
-//	wierzch_z_dziurom->obj->setLabel(L"wierzch z dziurom");
-//	wierzch_z_dziurom->obj->getTransform() = wnetrze->obj->getTransform();
-//	wierzch_z_dziurom->obj->getData()->setLabel("wierzchZD_mesh");
-//	AP::WORKSPACE::addModel(wierzch_z_dziurom->obj);
-//
-//	wierzch_z_dziurom->zbudujSiatke(szczeka_zeby);
-//
-//	// wyciskam rozepchana powierzchnie szczęki i robię dziurę za pomocą okluzji
-//
-//	wierzch_z_dziurom->zrob_wycisk_z_dziurom(szczeka_zeby, szczeka_okluzja);
-//
-//	wierzch_z_dziurom->klejDziury3();
-//	wierzch_z_dziurom->usunNadmiaroweScianki();
-//
-//	mZD = std::dynamic_pointer_cast<CMesh>(wierzch_z_dziurom->obj->getData());
-//}
-//
-//
-//void BiteSim::usunZeby()
-//{
-//	if (NULL != szczeka_zeby)
-//	{
-//		AP::WORKSPACE::removeModel(szczeka_zeby->id());
-//	}
-//
-//	if (NULL != szczeka_obj)
-//	{
-//		AP::WORKSPACE::removeModel(szczeka_obj->id());
-//	}
-//}
-//
 
 void BiteSim::szczeka_inicjuj2(std::shared_ptr<CMesh> mesh)
 {
@@ -231,8 +88,7 @@ void BiteSim::szczeka_inicjuj2(std::shared_ptr<CMesh> mesh)
 	m->setLabel("szczeka_mesh");
 
 	szczeka_obj = std::make_shared<CModel3D>();
-	//szczeka_obj->addChild(szczeka_obj, m);
-	szczeka_obj->addChild(m);
+	szczeka_obj->addChild(szczeka_obj, m);
 	szczeka_obj->importChildrenGeometry();
 	szczeka_obj->setLabel("SZCZEKA");
 
@@ -255,8 +111,7 @@ void BiteSim::szczeka_wytnijZebyNEW(std::shared_ptr<CPlane> cutPlane)
 	robo->cutPlane(*cutPlane);
 
 	szczeka_zeby = std::make_shared<CModel3D>();
-	//szczeka_zeby->addChild(szczeka_zeby, robo);
-	szczeka_zeby->addChild(robo);
+	szczeka_zeby->addChild(szczeka_zeby, robo);
 	szczeka_zeby->setName(L"---zęby---");
 	szczeka_zeby->setMin(robo->getMin());
 	szczeka_zeby->setMax(robo->getMax());
@@ -271,8 +126,7 @@ void BiteSim::szczeka_tworzMapeOkluzji2(std::shared_ptr<CMesh> mesh, CTransform 
 	o->setLabel("okluzja_mesh2");
 
 	szczeka_okluzja = std::make_shared<CModel3D>();
-	//szczeka_okluzja->addChild(szczeka_okluzja, o);
-	szczeka_okluzja->addChild(o);
+	szczeka_okluzja->addChild(szczeka_okluzja, o);
 	szczeka_okluzja->importChildrenGeometry();
 	szczeka_okluzja->setLabel("OKLUZJA");
 	szczeka_okluzja->applyTransformation(tFrom, tTo);

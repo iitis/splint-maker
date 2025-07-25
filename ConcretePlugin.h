@@ -21,12 +21,25 @@ class CPlane;
 
 #include <QtWidgets>
 
+#include "VoxelGrid.h"
+
 
 #include "moje_widgety.h"
 
 typedef enum { Nic, Sczeke, Zuchwe, Okluzje } CzekamNa;
 
+struct PairHash {
+	std::size_t operator()(const std::pair<unsigned int, unsigned int>& p) const {
+		return std::hash<unsigned int>()(p.first) ^ (std::hash<unsigned int>()(p.second) << 1);
+	}
+};
 
+
+/**
+ * @brief ConcretePlugin implements the main logic for the splint maker plugin.
+ * 
+ * This class provides mesh processing, bridging, filling, and other operations for dental splint design.
+ */
 class DPVISION_DLL_API ConcretePlugin : public QObject, public PluginInterface
 {
 	Q_OBJECT
@@ -42,15 +55,7 @@ class DPVISION_DLL_API ConcretePlugin : public QObject, public PluginInterface
 	std::shared_ptr<BiteSim> symulator;
 
 	std::shared_ptr<CAnnotationPlane> m_cutPlane;
-	std::shared_ptr<CAnnotationPlane> m_plaszczyzna_rzutowania; // , * m_rzutnia_copy;
-
-	std::shared_ptr<CAnnotationPlane> m_c1, m_c2;
-
-	std::shared_ptr<CAnnotationEdges> m_pts1, m_pts2;
-
-	std::wstring m_workdir;
-
-	//std::wstring szFileName, okFileName;
+	std::shared_ptr<CAnnotationPlane> m_plaszczyzna_rzutowania;
 
 	int m_divider;
 	CzekamNa waiting_for;
@@ -61,21 +66,40 @@ class DPVISION_DLL_API ConcretePlugin : public QObject, public PluginInterface
 	std::shared_ptr<CMesh> mesh_wierzch, mesh_wnetrze;
 
 public:
+    /**
+     * @brief Constructor.
+     */
     ConcretePlugin(void);
-    ~ConcretePlugin(void);
+    ~ConcretePlugin(void) {};
 
+	/**
+	 * @brief Called when the plugin is loaded.
+	 */
+	virtual void onLoad() override;
+
+	/**
+	 * @brief Called when a model is indicated/selected.
+	 * @param objId ID of the indicated object.
+	 * @return true if handled, false otherwise.
+	 */
+	virtual bool onModelIndication(int objId) override;
+
+	/**
+	 * @brief Calculates occlusion between two meshes.
+	 * @param szczeka Upper jaw mesh.
+	 * @param zuchwa Lower jaw mesh.
+	 * @param dist Distance threshold.
+	 * @return Resulting mesh.
+	 */
 	std::shared_ptr<CMesh> liczOkluzje(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist);
 
-	void run(void);
-
-	void pickSlot(int objId, CAnnotationPoint& pt) {};
-
-	void znajdzWierzcholkiBrzegowe(std::shared_ptr<CMesh> mesh, std::set<unsigned int>& boundaryVertices);
-
-	std::shared_ptr<CMesh> zrzutujNaPlaszczyzne(std::shared_ptr<CMesh> mesh, CPlane &cutPlane, CVector3d ray);
-
-	std::shared_ptr<CModel3D> dodajMeshDoProjektu(std::shared_ptr<CMesh> mesh, QString label);
-
+	/**
+	 * @brief Merges two meshes, optionally inverting one.
+	 * @param wierzchZdeklem Outer mesh.
+	 * @param wnetrze Inner mesh.
+	 * @param invert Whether to invert the inner mesh.
+	 * @return Merged mesh.
+	 */
 	std::shared_ptr<CMesh> scalMeshe(std::shared_ptr<CMesh> wierzchZdeklem, std::shared_ptr<CMesh> wnetrze, bool invert = false);
 
 	void wczytaj_spreparowany_ATMDL();
@@ -83,28 +107,54 @@ public:
 	void etap00(double dist2, bool dane_z_pomiaru);
 	void etap01(int div);
 	void etap11();
-	void etap12(double dVal);
-	void etap13_v2(double dVal);
-	void etap14();
+    void etap123(double dValIn, double dValOut);
+    void reset_plugin();
+    void wytlaczanie();
+    void etap14();
 
-	void go_to_exchange();
-
-	void etap_dekiel_cien();
-
-	void go_to_multisaver();
-
-	void etap_zapisz_wynik();
+	void save_all();
 
 	void showMainPanel();
 
-	void onLoad();
-	void onUnload();
-	int usunWadliweScianki(std::shared_ptr<CMesh> mesh);
-	void wytnijDekiel2(std::shared_ptr<CMesh> rzutWierzchu, std::shared_ptr<CMesh> rzutWnetrza);
-	std::shared_ptr<CMesh> dekiel_cien(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze, CVector3d ray);
-	void createE2Fmap(std::shared_ptr<CMesh> mesh, MapOfNewEdges& allEdges);
-	virtual bool onModelIndication(int objId) override;
+	/**
+	 * @brief Creates a stamp mesh from the given mesh.
+	 * @param mesh Input mesh.
+	 * @return Stamp mesh.
+	 */
+	std::shared_ptr<CMesh> stampFromMesh(std::shared_ptr<CMesh> mesh);
+
+	/**
+	 * @brief Creates an impression of a stamp on a mesh.
+	 * @param wierzch Outer mesh.
+	 * @param stempel Stamp mesh.
+	 * @param _distMax Maximum distance for stamping.
+	 */
+	void zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> stempel, double _distMax=0.0);
+	
+	/**
+	 * @brief Creates holes in the meshes.
+	 * @param wierzch Outer mesh.
+	 * @param wnetrze Inner mesh.
+	 * @return Pair of meshes with holes.
+	 */
+	std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze);
+
+	/**
+	 * @brief Bridges two meshes by connecting their boundaries.
+	 * @param sz First mesh.
+	 * @param ok Second mesh.
+	 * @return Bridged mesh.
+	 */
+	std::shared_ptr<CMesh> bridging(std::shared_ptr<CMesh> sz, std::shared_ptr<CMesh> ok);
+
+	/**
+	 * @brief Fills all boundary loops of a mesh.
+	 * @param test Input mesh.
+	 * @return Mesh with filled boundaries.
+	 */
+	std::shared_ptr<CMesh> filling(std::shared_ptr<CMesh> test);
 
 signals:
+	/// Signal to update the progress bar value.
 	void setProgressBarValue(int);
 };

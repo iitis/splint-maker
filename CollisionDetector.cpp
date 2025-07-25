@@ -4,8 +4,7 @@
 #include "Triangle.h"
 #include "Mesh.h"
 
-//#include "../api/UI.h"
-#include "UI.h"
+#include "../api/UI.h"
 
 bool CollisionDetector::testIntersectionOfTriangleWithTriangle3d(CPoint3d p1, CPoint3d q1, CPoint3d r1, CPoint3d p2, CPoint3d q2, CPoint3d r2)
 {

@@ -25,40 +25,40 @@ public:
 	QRadioButton* zObliczen;
 
 	WidgetWyborSiatek(QWidget* p = nullptr) : QWidget(p) {
-		infoLabel00 = new QLabel(QString::fromUtf8("Aby wygenerować szynę, potrzebujesz siatkę reprezentującą szczękę i siatkę reprezentującą powierzchnię okluzyjną przesuniętą do pozycji terapeutycznej."));
+		infoLabel00 = new QLabel(QString::fromUtf8("To generate a splint, you need a mesh representing the upper jaw and a mesh representing the occlusal surface shifted to the therapeutic position."));
 		infoLabel00->setWordWrap(true);
-		infoLabel01 = new QLabel(QString::fromUtf8("Jeśli nie masz powierzchni okluzyjnej, możesz użyć siatki reprezentującej żuchwę i spróbować wygenerować tę powierzchnię."));
+		infoLabel01 = new QLabel(QString::fromUtf8("If you do not have an occlusal surface, you can use a mesh representing the lower jaw and try to generate this surface."));
 		infoLabel01->setWordWrap(true);
-		infoLabel = new QLabel(QString::fromUtf8("Możesz wczytać wcześniej przygotowany plik .atmdl. Siatki zostaną rozpoznane w oparciu o słowa kluczowe lub etykiety."));
+		infoLabel = new QLabel(QString::fromUtf8("You can load a previously prepared .atmdl file. Meshes will be recognized based on keywords or labels."));
 		infoLabel->setWordWrap(true);
-		infoLabel2 = new QLabel(QString::fromUtf8("Jeśli siatki nie zostaną poprawnie rozpoznane, albo wolisz wczytać je w standardowy sposób, możesz wskazać ich funkcję korzystając z przycisków poniżej i klikając właściwą siatkę w oknie projektu."));
+		infoLabel2 = new QLabel(QString::fromUtf8("If the meshes are not recognized correctly, or you prefer to load them in the standard way, you can assign their function using the buttons below and by clicking the appropriate mesh in the project window."));
 		infoLabel2->setWordWrap(true);
 
-		rodzajDanych = new QGroupBox(QString::fromUtf8("Model żuchwy jest oryginalnie w pozycji:"));
-		zPomiaru = new QRadioButton(QString::fromUtf8("terapeutycznej"));
+		rodzajDanych = new QGroupBox(QString::fromUtf8("The lower jaw model is originally in position:"));
+		zPomiaru = new QRadioButton(QString::fromUtf8("therapeutic"));
 		zPomiaru->setChecked(true);
-		zObliczen = new QRadioButton(QString::fromUtf8("zerowej"));
+		zObliczen = new QRadioButton(QString::fromUtf8("zero"));
 		QHBoxLayout* hl = new QHBoxLayout();
 		hl->addWidget(zObliczen);
 		hl->addWidget(zPomiaru);
 
 		rodzajDanych->setLayout(hl);
 
-		btSzczLabel = new QLabel(QString::fromUtf8("wybierz siatkę szczęki:"));
+		btSzczLabel = new QLabel(QString::fromUtf8("select upper jaw mesh:"));
 		btSzczLabel->setStyleSheet(QString::fromUtf8("color:#f00;"));
 
-		btZuchLabel = new QLabel(QString::fromUtf8("wybierz siatkę zuchwy:"));
+		btZuchLabel = new QLabel(QString::fromUtf8("select lower jaw mesh:"));
 		
-		btOkluLabel = new QLabel(QString::fromUtf8("wybierz siatkę okluzji:"));
+		btOkluLabel = new QLabel(QString::fromUtf8("select occlusion mesh:"));
 		btOkluLabel->setStyleSheet(QString::fromUtf8("color:#f00;"));
 
-		okluDistLabel = new QLabel(QString::fromUtf8("określ odległość dla okluzji:"));
+		okluDistLabel = new QLabel(QString::fromUtf8("set occlusion distance:"));
 		
-		btAtmdl = new QPushButton(QString::fromUtf8("wczytaj przygotowany plik .atmdl"));
+		btAtmdl = new QPushButton(QString::fromUtf8("load prepared .atmdl file"));
 		btSzcz = new QPushButton("...");
 		btZuch = new QPushButton("...");
 		btOklu = new QPushButton("...");
-		btLiczOklu = new QPushButton(QString::fromUtf8("wygeneruj siatkę okluzji"));
+		btLiczOklu = new QPushButton(QString::fromUtf8("generate occlusion mesh"));
 		okluDist = new QDoubleSpinBox();
 		okluDist->setValue(2.0);
 
@@ -97,35 +97,35 @@ public:
 		btSzczLabel->setText(label);
 		btSzczLabel->setStyleSheet(QString::fromUtf8("color:#00f;"));
 
-		btSzcz->setText(QString::fromUtf8("zmień siatkę szczęki..."));
+		btSzcz->setText(QString::fromUtf8("change upper jaw mesh..."));
 	}
 
 	void ustawOkluzje(QString label) {
 		btOkluLabel->setText(label);
 		btOkluLabel->setStyleSheet(QString::fromUtf8("color:#00f;"));
 
-		btOklu->setText(QString::fromUtf8("zmień siatkę okluzji..."));
+		btOklu->setText(QString::fromUtf8("change occlusion mesh..."));
 	}
 	void ustawZuchwe(QString label) {
 		btZuchLabel->setText(label);
 		btZuchLabel->setStyleSheet(QString::fromUtf8("color:#00f;"));
 
-		btZuch->setText(QString::fromUtf8("zmień siatkę żuchwy..."));
+		btZuch->setText(QString::fromUtf8("change lower jaw mesh..."));
 	}
 };
 
-class WidgetEtap1 : public QWidget {
+class WidgetGestoscSiatki : public QWidget {
 	Q_OBJECT
 public:
 	QLabel* meshDividerLabel;
 	QSpinBox* meshDivider;
 	QPushButton* btStart;
 
-	WidgetEtap1(QWidget* p = nullptr) : QWidget(p) {
-		meshDividerLabel = new QLabel(QString::fromUtf8("określ gęstość siatki [lb.węzłów/1 mm]"));
+	WidgetGestoscSiatki(QWidget* p = nullptr) : QWidget(p) {
+		meshDividerLabel = new QLabel(QString::fromUtf8("set mesh density [nodes/1 mm]"));
 		meshDivider = new QSpinBox();
 		meshDivider->setValue(10);
-		btStart = new QPushButton(QString::fromUtf8("Dalej"));
+		btStart = new QPushButton(QString::fromUtf8("Next"));
 
 		QFormLayout* l = new QFormLayout(this);
 
@@ -146,12 +146,12 @@ public:
 	QPushButton* btStart;
 
 	WidgetPrzytnijSzczeke(QWidget* p = nullptr) : QWidget(p) {
-		infoLabel = new QLabel(QString::fromUtf8("Opcjonalnie, teraz możesz przyciąć siatkę szczęki aby np. usunąć podniebienie."));
+		infoLabel = new QLabel(QString::fromUtf8("Optionally, you can now trim the upper jaw mesh, e.g. to remove the palate."));
 		infoLabel->setWordWrap(true);
-		insideDistLabel = new QLabel(QString::fromUtf8("Odległość w mm"));
+		insideDistLabel = new QLabel(QString::fromUtf8("Distance in mm"));
 		insideDist = new QDoubleSpinBox();
 		insideDist->setValue(10.0);
-		btStart = new QPushButton(QString::fromUtf8("przytnij do okluzji"));
+		btStart = new QPushButton(QString::fromUtf8("trim to occlusion"));
 
 		QFormLayout* l = new QFormLayout(this);
 
@@ -164,51 +164,34 @@ public:
 };
 
 
-class WidgetEtap12 : public QWidget {
+class WidgetEtap123 : public QWidget {
 	Q_OBJECT
 public:
 	QLabel* insideDistLabel;
 	QDoubleSpinBox* insideDist;
-	QPushButton* btStart;
+	QLabel* outsideDistLabel;
+	QDoubleSpinBox* outsideDist;
+	QPushButton* btStart23;
 
-	WidgetEtap12(QWidget* p = nullptr) : QWidget(p) {
-		insideDistLabel = new QLabel(QString::fromUtf8("rozepchanie wnetrza w mm"));
+	WidgetEtap123(QWidget* p = nullptr) : QWidget(p) {
+		insideDistLabel = new QLabel(QString::fromUtf8("inner surface displacement [mm]"));
+		outsideDistLabel = new QLabel(QString::fromUtf8("outer surface displacement [mm]"));
 		insideDist = new QDoubleSpinBox();
 		insideDist->setValue(0.3);
-		btStart = new QPushButton(QString::fromUtf8("generuj wnętrze"));
+		outsideDist = new QDoubleSpinBox();
+		outsideDist->setValue(1.3);
+		btStart23 = new QPushButton(QString::fromUtf8("CREATE SPLINT"));
 
 		QFormLayout* l = new QFormLayout(this);
 
 		l->addRow(insideDistLabel, insideDist);
-		l->addRow(btStart);
-
-		this->setLayout(l);
-	}
-};
-
-
-class WidgetEtap13 : public QWidget {
-	Q_OBJECT
-public:
-	QLabel* outsideDistLabel;
-	QDoubleSpinBox* outsideDist;
-	QPushButton* btStart, *btStart2, *btStart3;
-
-	WidgetEtap13(QWidget* p = nullptr) : QWidget(p) {
-		outsideDistLabel = new QLabel(QString::fromUtf8("rozepchanie wierzchu w mm"));
-		outsideDist = new QDoubleSpinBox();
-		outsideDist->setValue(1.3);
-		btStart2 = new QPushButton(QString::fromUtf8("generuj wierzch"));
-		
-		QFormLayout* l = new QFormLayout(this);
-
 		l->addRow(outsideDistLabel, outsideDist);
-		l->addRow(btStart2);
-		
+		l->addRow(btStart23);
 
 		this->setLayout(l);
 	}
 };
+
 
 
 class WidgetInfo : public QWidget {
@@ -228,7 +211,7 @@ public:
 			l->addRow(label);
 		}
 
-		btStart = new QPushButton(QString::fromUtf8("Dalej"));
+		btStart = new QPushButton(QString::fromUtf8("Next"));
 
 		l->addRow(btStart);
 
@@ -241,10 +224,11 @@ class MojWidget : public QWidget {
 public:
 	WidgetWyborSiatek* wybor_siatek;
 	WidgetPrzytnijSzczeke* przytnij_szczene;
-	WidgetEtap1* etap11;
-	WidgetEtap12* etap12;
-	WidgetEtap13* etap13;
-	WidgetInfo *widget_info, *etap14, *etap15, *info_koncowe, *info_zapis, *info_exchange;
+	WidgetGestoscSiatki* etap11;
+	WidgetEtap123* etap123;
+	WidgetInfo *widget_info;
+	WidgetInfo *info_koncowe;
+	WidgetInfo *info_zapis;
 	QPushButton* dotnij_btn;
 
 	MojWidget(QWidget* p = nullptr) : QWidget(p) {

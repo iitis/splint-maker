@@ -4,10 +4,8 @@
 #include "KDNode2.h"
 #include "AnnotationPoint.h"
 
-//#include "../api/AP.h"
-//#include "../api/UI.h"
-#include "AP.h"
-#include "UI.h"
+#include "../api/AP.h"
+#include "../api/UI.h"
 
 void CSiateczka1::close(int id, CSiateczka1 *s)
 {
@@ -21,8 +19,7 @@ CSiateczka1::CSiateczka1( unsigned int sizeXmm , unsigned int sizeYmm, unsigned 
 {
 	obj = std::make_shared<CModel3D>();
 
-	//obj->addChild(obj, std::make_shared<CMesh>());
-	obj->addChild(std::make_shared<CMesh>());
+	obj->addChild(obj, std::make_shared<CMesh>());
 
 	int tmpX = (sizeXmm+1) / 2;
 	if ( tmpX % 2) tmpX++;
@@ -244,7 +241,7 @@ void CSiateczka1::zbudujSiatke(std::shared_ptr<CModel3D> zebyObj)
 // o2 - to jest powierzchnia okluzji
 void CSiateczka1::zrobWyciskSumy4(std::shared_ptr<CModel3D> o1, std::shared_ptr<CModel3D> o2, bool test2)
 {
-	unsigned long t1 = GetTickCount();
+//	unsigned long t1 = GetTickCount();
 
 	std::shared_ptr<CMesh> rzutnia = std::dynamic_pointer_cast<CMesh>(obj->getData());
 
@@ -255,7 +252,7 @@ void CSiateczka1::zrobWyciskSumy4(std::shared_ptr<CModel3D> o1, std::shared_ptr<
 	// SIATKA SZCZEKI (ROZEPCHANA)
 	for (int i = 0; i < zeby1->faces().size(); i++)
 	{
-		UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk 1. Zostało %d ścian.", i);
+		//UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk 1. Zostało %d ścian.", i);
 
 		CTriangle t = CTriangle(i, zeby1.get()).transformByMatrix(trans10.toEigenMatrix4d());
 
@@ -309,7 +306,7 @@ void CSiateczka1::zrobWyciskSumy4(std::shared_ptr<CModel3D> o1, std::shared_ptr<
 		// SIATKA OKLUZJI
 		for (int i = 0; i < zeby2->faces().size(); i++)
 		{
-			UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk 2. Zostało %d ścian.", i);
+			//UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk 2. Zostało %d ścian.", i);
 
 			CTriangle t = CTriangle(i, zeby2.get()).transformByMatrix(trans20.toEigenMatrix4d());
 
@@ -355,7 +352,7 @@ void CSiateczka1::zrobWyciskSumy4(std::shared_ptr<CModel3D> o1, std::shared_ptr<
 		}
 	}
 
-	UI::STATUSBAR::printf(L"Wycisk gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
+//	UI::STATUSBAR::printf(L"Wycisk gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
 
 	UI::updateAllViews();
 }
@@ -375,7 +372,7 @@ void CSiateczka1::zrob_wycisk_z_dziurom(std::shared_ptr<CModel3D> o1, std::share
 		return;
 	}
 
-	unsigned long t1 = GetTickCount();
+//	unsigned long t1 = GetTickCount();
 
 	std::shared_ptr<CMesh> rzutnia = std::dynamic_pointer_cast<CMesh>(obj->getData());
 	std::shared_ptr<CMesh> zeby1 = std::dynamic_pointer_cast<CMesh>(o1->getData());
@@ -385,7 +382,7 @@ void CSiateczka1::zrob_wycisk_z_dziurom(std::shared_ptr<CModel3D> o1, std::share
 	// SIATKA SZCZEKI (ROZEPCHANA)
 	for (int i = 0; i < zeby1->faces().size(); i++)
 	{
-		UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk 1. Zostało %d ścian.", i);
+		//UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk 1. Zostało %d ścian.", i);
 
 		CTriangle t = CTriangle(i, zeby1.get()).transformByMatrix(trans10.toEigenMatrix4d());
 
@@ -437,7 +434,7 @@ void CSiateczka1::zrob_wycisk_z_dziurom(std::shared_ptr<CModel3D> o1, std::share
 	// SIATKA OKLUZJI
 	for (int i = 0; i < zeby2->faces().size(); i++)
 	{
-		UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk 2. Zostało %d ścian.", i);
+		//UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk 2. Zostało %d ścian.", i);
 
 		CTriangle t = CTriangle(i, zeby2.get()).transformByMatrix(trans20.toEigenMatrix4d());
 
@@ -513,7 +510,7 @@ void CSiateczka1::zrob_wycisk_z_dziurom(std::shared_ptr<CModel3D> o1, std::share
 	rzutnia->removeUnusedVertices();
 
 
-	UI::STATUSBAR::printf(L"Wycisk gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
+//	UI::STATUSBAR::printf(L"Wycisk gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
 
 	UI::updateAllViews();
 }
@@ -527,7 +524,7 @@ void CSiateczka1::zrob_wycisk_z_dziurom(std::shared_ptr<CModel3D> o1, std::share
 
 void CSiateczka1::zrobWyciskZuchwy_v1(std::shared_ptr<CModel3D> o4, double _distMax, double ndir, std::set<CVertex>* bledy, std::set<int>* bledy2)
 {
-	unsigned long t1 = GetTickCount();
+//	unsigned long t1 = GetTickCount();
 
 	std::shared_ptr<CMesh> zeby4 = std::dynamic_pointer_cast<CMesh>(o4->getData());
 
@@ -545,7 +542,7 @@ void CSiateczka1::zrobWyciskZuchwy_v1(std::shared_ptr<CModel3D> o4, double _dist
 	CPoint3d mid = rzutnia->getCenterOfWeight();
 
 	for (int i = 0; i < rzutnia->vertices().size(); i++) {
-		UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk zuchwy. Wertex %d z %d.", i, rzutnia->vertices().size());
+		//UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk zuchwy. Wertex %d z %d.", i, rzutnia->vertices().size());
 
 		CVertex p0 = rzutnia->vertices()[i];
 
@@ -603,7 +600,7 @@ void CSiateczka1::zrobWyciskZuchwy_v1(std::shared_ptr<CModel3D> o4, double _dist
 	}
 
 
-	UI::STATUSBAR::printf(L"Wycisk zuchwy gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
+//	UI::STATUSBAR::printf(L"Wycisk zuchwy gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
 
 	UI::updateAllViews();
 }
@@ -612,19 +609,19 @@ void CSiateczka1::zrobWyciskZuchwy_v1(std::shared_ptr<CModel3D> o4, double _dist
 
 void CSiateczka1::zrobWycisk2(std::shared_ptr<CModel3D> zebyObj)
 {
-	unsigned long t1 = GetTickCount();
+//	unsigned long t1 = GetTickCount();
 
 	qInfo() << "CSiateczka1::zrobWycisk2()";
 
 	std::shared_ptr<CMesh> zeby = std::dynamic_pointer_cast<CMesh>(zebyObj->getData());
 	std::shared_ptr<CMesh> rzutnia = std::dynamic_pointer_cast<CMesh>(obj->getData());
 
-	//FILE * plik = fopen("siateczka_wezly.txt", "w");
-
+	if (!zeby || !rzutnia) qInfo() << "BLAD";
 
 	for (int i = 0; i < zeby->faces().size(); i++)
 	{
-		UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk. Zostało %d ścian.", i );
+		//UI::STATUSBAR::printfTimed(1000, L"Tworzę wycisk. Zostało %d ścian.", i );
+		// UI::STATUSBAR::printf(L"Tworzę wycisk. Zostało %d ścian.", i );
 
 		CFace f = zeby->faces().at(i);
 		
@@ -681,7 +678,8 @@ void CSiateczka1::zrobWycisk2(std::shared_ptr<CModel3D> zebyObj)
 	}
 	//fclose(plik);
 
-	UI::STATUSBAR::printf(L"Wycisk gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
+//	UI::STATUSBAR::printf(L"Wycisk gotowy. Czas wykonania: %d ms", GetTickCount() - t1);
+
 
 	UI::updateAllViews();
 }
@@ -741,7 +739,7 @@ void CSiateczka1::klejDziury3()
 		{
 			double x = (double)ix / div;
 
-			UI::STATUSBAR::printfTimed(1000, L"Kleję dziury (v.3) [ x:%d, y:%d ]", ix, iy);
+			//UI::STATUSBAR::printfTimed(1000, L"Kleję dziury (v.3) [ x:%d, y:%d ]", ix, iy);
 
 			dziura.clear();
 
@@ -773,7 +771,7 @@ void CSiateczka1::klejDziury3()
 	UI::updateAllViews();
 
 	rzutnia->correctNormals();
-	UI::STATUSBAR::printf(L"Dziury zostały zaklejone.");
+	//UI::STATUSBAR::printf(L"Dziury zostały zaklejone.");
 
 	UI::updateAllViews();
 }
@@ -787,7 +785,7 @@ void CSiateczka1::odwrocNormalne()
 	m->correctNormals();
 	m->invertNormals();
 
-	UI::STATUSBAR::printf(L"Normalne ścian zostały odwrócone");
+	//UI::STATUSBAR::printf(L"Normalne ścian zostały odwrócone");
 
 	UI::updateAllViews();
 }
@@ -803,9 +801,12 @@ void CSiateczka1::usunNadmiaroweScianki()
 	std::vector<CFace> newFaces;
 	std::vector<CVector3f> newNormals;
 
+	qInfo() << rzutnia->faces().size();
+
 	for (int i = rzutnia->faces().size() - 1; i >= 0; i--)
 	{
-		UI::STATUSBAR::printfTimed( 1000, L"Usuwam niepotrzebne scianki. Zostało:%d", i);
+		//UI::STATUSBAR::printfTimed( 1000, L"Usuwam niepotrzebne scianki. Zostało:%d", i);
+
 		CFace f = rzutnia->faces()[i];
 
 		if ((rzutnia->vertices()[f.A()].Z() > prog) || (rzutnia->vertices()[f.B()].Z() > prog) || (rzutnia->vertices()[f.C()].Z() > prog))
@@ -824,8 +825,7 @@ void CSiateczka1::usunNadmiaroweScianki()
 
 	rzutnia->removeUnusedVertices();
 
-	UI::STATUSBAR::printf(L"Niepotrzebne ścianki i wierzchołki zostały usuniete.");
+	//UI::STATUSBAR::printf(L"Niepotrzebne ścianki i wierzchołki zostały usuniete.");
 
 	UI::updateAllViews();
 }
-

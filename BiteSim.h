@@ -1,8 +1,7 @@
 #pragma once
 
 #include "Workspace.h"
-//#include "../api/AP.h"
-#include "AP.h"
+#include "../api/AP.h"
 
 #include "Siateczka1.h"
 
@@ -10,15 +9,20 @@ class CMesh;
 
 class BiteSim
 {
+	std::shared_ptr<CModel3D> szczeka_oryginalneOdcieteZeby;
+	std::map<std::pair<int, int>, double> szczeka_mapaOkluzji;	 // < < int x, int y>, double z >
+
 public:
 	std::shared_ptr<CModel3D> szczeka_obj;
 	std::shared_ptr<CModel3D> szczeka_zeby;
-	std::shared_ptr<CModel3D> szczeka_oryginalneOdcieteZeby;
 	std::shared_ptr<CModel3D> szczeka_okluzja;
-	std::map<std::pair<int, int>, double> szczeka_mapaOkluzji;	 // < < int x, int y>, double z >
+
+	CSiateczka1* wierzch;
+	CSiateczka1* wnetrze;
+
+	int m_divider;
 
 	void szczeka_inicjuj2(std::shared_ptr<CMesh> mesh);
-	
 	void szczeka_wytnijZebyNEW(std::shared_ptr<CPlane> cutPlane);
 	
 
@@ -27,14 +31,6 @@ public:
 	void szczeka_rozepchajZeby(float d, bool wierzch = false);
 	
 	void szczeka_rozepchajZebyRegular(float d);
-
-	CSiateczka1* wierzch;
-	CSiateczka1* wnetrze;
-
-	//std::shared_ptr<CMesh> mBD;
-	//std::shared_ptr<CMesh> mZD;
-
-	int m_divider;
 
 	BiteSim(void) {};
 	~BiteSim(void) {};
