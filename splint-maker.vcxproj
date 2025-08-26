@@ -11,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{05A8AB95-0DA9-4DD4-BD1F-92ABCBFE475A}</ProjectGuid>
+    <ProjectGuid>{2AD53AC2-9BE6-43B5-9CCD-FD1629FAF795}</ProjectGuid>
     <RootNamespace>PluginDLL</RootNamespace>
     <Keyword>Win32Proj</Keyword>
     <Keyword>QtVS_v304</Keyword>
