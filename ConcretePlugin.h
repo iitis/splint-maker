@@ -92,6 +92,7 @@ public:
 	 * @return Resulting mesh.
 	 */
 	std::shared_ptr<CMesh> liczOkluzje(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist);
+	std::shared_ptr<CMesh> liczOkluzje2(std::shared_ptr<CMesh> szczeka1, std::shared_ptr<CMesh> zuchwa1, double dist);
 
 	/**
 	 * @brief Merges two meshes, optionally inverting one.
@@ -104,7 +105,10 @@ public:
 
 	void wczytaj_spreparowany_ATMDL();
 
+
 	void etap00(double dist2, bool dane_z_pomiaru);
+	void etap00ag(double dist2, bool dane_z_pomiaru);
+
 	void etap01(int div);
 	void etap11();
     void etap123(double dValIn, double dValOut);

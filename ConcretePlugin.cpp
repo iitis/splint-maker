@@ -56,6 +56,21 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 {
 	std::set<size_t> good;
 
+	//auto szczeka = std::dynamic_pointer_cast<CMesh>(szczeka1->getCopy());
+	//auto zuchwa = std::dynamic_pointer_cast<CMesh>(zuchwa1->getCopy());
+
+	//auto _sM = CBaseObject::getGlobalTransformationMatrix(szczeka1);
+	//auto _zM = CBaseObject::getGlobalTransformationMatrix(zuchwa1);
+
+	//auto _sT = CTransform(_sM);
+	//auto _zT = CTransform(_zM);
+	//auto nullT = CTransform();
+
+	////transformacja szczeki do ukladu zuchwy
+	//szczeka->applyTransformation(_sT, nullT);
+	////transformacja zuchwy do ukladu zuchwy (tożsama)
+	//zuchwa->applyTransformation(_zT, nullT);
+
 	CMesh::KDtree *kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
 
 	UI::STATUSBAR::setText("Looking for unwanted vertices. Please wait...");
@@ -127,6 +142,98 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 
 	return okluzja;
 }
+
+std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje2(std::shared_ptr<CMesh>  szczeka1, std::shared_ptr<CMesh>  zuchwa1, double dist = 3.0)
+{
+	std::set<size_t> good;
+
+	auto szczeka = std::dynamic_pointer_cast<CMesh>(szczeka1->getCopy());
+	auto zuchwa = std::dynamic_pointer_cast<CMesh>(zuchwa1->getCopy());
+
+	auto _sM = CBaseObject::getGlobalTransformationMatrix(szczeka1);
+	auto _zM = CBaseObject::getGlobalTransformationMatrix(zuchwa1);
+
+	auto _sT = CTransform(_sM);
+	auto _zT = CTransform(_zM);
+	auto nullT = CTransform();
+
+	//transformacja szczeki do ukladu zuchwy
+	szczeka->applyTransformation(_sT, nullT);
+	//transformacja zuchwy do ukladu zuchwy (tożsama)
+	zuchwa->applyTransformation(_zT, nullT);
+
+	CMesh::KDtree* kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
+
+	UI::STATUSBAR::setText("Looking for unwanted vertices. Please wait...");
+	UI::PROGRESSBAR::init(0, szczeka->vertices().size(), 0);
+
+	int progress = 0;
+
+#pragma omp parallel for
+	for (long idx = 0; idx < szczeka->vertices().size(); idx++)
+	{
+		CVertex& v = szczeka->vertices()[idx];
+
+		if (kd->is_any_in_distance_to_pt(dist, v))
+			good.insert(idx);
+
+#pragma omp atomic
+		progress++;
+
+#pragma omp critical
+		{
+			emit setProgressBarValue(progress);
+		}
+
+	}
+
+	zuchwa->removeKDtree();
+	UI::PROGRESSBAR::hide();
+
+	std::shared_ptr<CMesh> okluzja = std::dynamic_pointer_cast<CMesh>(szczeka->getCopy());
+
+	UI::STATUSBAR::setText("Removing unwanted faces. Plese wait...");
+
+	std::vector<CFace>& faces = okluzja->faces();
+	std::vector<bool> toErase(faces.size(), false);
+
+	UI::PROGRESSBAR::init(0, faces.size(), 0);
+	progress = 0;
+
+#pragma omp parallel for
+	for (int idx = 0; idx < faces.size(); ++idx) {
+		CFace& f = faces[idx];
+
+		if ((good.find(f.A()) == good.end()) || (good.find(f.B()) == good.end()) || (good.find(f.C()) == good.end())) {
+			toErase[idx] = true;
+		}
+
+#pragma omp atomic
+		++progress;
+
+#pragma omp critical
+		{
+			emit setProgressBarValue(progress);
+		}
+	}
+
+	size_t idx = 0;
+	auto it = std::remove_if(faces.begin(), faces.end(),
+		[&toErase, &idx](const CFace&) {
+			return toErase[idx++];
+		});
+	faces.erase(it, faces.end());
+
+
+	okluzja->removeUnusedVertices();
+
+	UI::PROGRESSBAR::hide();
+
+	UI::STATUSBAR::setText("Ready!");
+
+	return okluzja;
+}
+
 
 std::shared_ptr<CMesh> meshWithKeyword(QString keyword, CObject::Children kids)
 {
@@ -357,6 +464,199 @@ void ConcretePlugin::etap00(double dist2, bool dane_z_pomiaru)
 }
 
 
+std::pair<Eigen::Matrix4d, Eigen::Matrix4d> getTransformationMatrices(std::shared_ptr<CBaseObject> obj, std::string stop)
+{
+	Eigen::Matrix4d rootToStop = Eigen::Matrix4d::Identity();
+	Eigen::Matrix4d stopToObj = Eigen::Matrix4d::Identity();
+
+	if (!obj) return { rootToStop, stopToObj };
+
+	QString stopQ = QString::fromStdString(stop);
+
+	// Zbierz węzły od obiektu w górę aż do (ale NIE włączając) stop
+	std::vector<std::shared_ptr<CBaseObject>> below;
+	std::shared_ptr<CBaseObject> cur = obj;
+	while (cur && cur->getLabel().compare(stopQ, Qt::CaseInsensitive) != 0) {
+		below.push_back(cur);
+		cur = cur->getParentPtr();
+	}
+
+	// 'cur' jest teraz albo węzłem o label==stop, albo nullptr
+	// Zbierz węzły od stop w górę (włącznie)
+	std::vector<std::shared_ptr<CBaseObject>> above;
+	while (cur) {
+		above.push_back(cur);
+		cur = cur->getParentPtr();
+	}
+
+	// stop -> obj: mnożymy od dołu (obj) do góry (bez stop)
+	for (size_t i = 0; i < below.size(); ++i) {
+		auto n = below[i];
+		if (n->hasTransformation()) {
+			stopToObj = n->getTransformationMatrix() * stopToObj;
+		}
+	}
+
+	// root -> stop: mnożymy od stop w górę, ale kolejność mnożenia daje finalnie root..stop
+	for (size_t i = 0; i < above.size(); ++i) {
+		auto n = above[i];
+		if (n->hasTransformation()) {
+			rootToStop = n->getTransformationMatrix() * rootToStop;
+		}
+	}
+
+	return { rootToStop, stopToObj };
+}
+
+std::pair<Eigen::Matrix4d, Eigen::Matrix4d> makeReversedOrderMatrices(
+	const Eigen::Matrix4d& rootToStop,
+	const Eigen::Matrix4d& stopToObj)
+{
+	Eigen::Matrix4d rootToStop1 = rootToStop;
+	Eigen::Matrix4d stopToObj1 = stopToObj;
+
+	// Spróbuj odwrócić stopToObj; sprawdź numeryczną odwracalność
+	const double eps = 1e-12;
+	Eigen::FullPivLU<Eigen::Matrix4d> lu(stopToObj);
+	if (!lu.isInvertible()) {
+		// fallback: nie da się odwrócić - zwracamy oryginały (bez transformacji)
+		return { rootToStop1, stopToObj1 };
+	}
+
+	Eigen::Matrix4d stopToObjInv = stopToObj.inverse();
+
+	// koniugacja: rootToStop1 = S^{-1} * R * S
+	rootToStop1 = stopToObjInv * rootToStop * stopToObj;
+
+	return { rootToStop1, stopToObj1 };
+}
+
+void ConcretePlugin::etap00ag(double dist2, bool dane_z_pomiaru)
+{
+	QCursor c = moj_widget->cursor();
+	c.setShape(Qt::CursorShape::WaitCursor);
+	moj_widget->setCursor(c);
+
+	std::shared_ptr<CMesh> sz1 = std::dynamic_pointer_cast<CMesh>(szcz->getCopy());
+	std::shared_ptr<CMesh> zu1 = std::dynamic_pointer_cast<CMesh>(zuch->getCopy());
+
+	Eigen::Matrix4d mSz = CBaseObject::getGlobalTransformationMatrix(szcz);
+	auto [mZuR, mZu] = getTransformationMatrices(zuch, "transformation");
+
+	auto [mZuR1, mZu1] = makeReversedOrderMatrices(mZuR, mZu);
+
+	CTransform nullT;
+	CTransform tSz(mSz);
+	CTransform tZu(mZu);
+	CTransform tZuR1(mZuR1);
+	CTransform tZuR(mZuR);
+
+	auto nowymodelSz = std::make_shared<CModel3D>();
+	nowymodelSz->setLabel("Szczeka_global");
+	nowymodelSz->setTransform(tSz);
+	AP::WORKSPACE::addObject(nowymodelSz);
+	AP::OBJECT::addChild(nowymodelSz, sz1);
+	nowymodelSz->applyTransform();
+
+
+	auto nowymodelZu = std::make_shared<CModel3D>();
+	nowymodelZu->setLabel("Zuchwa_global");
+	nowymodelZu->setTransform(tZu);
+	AP::WORKSPACE::addObject(nowymodelZu);
+	AP::OBJECT::addChild(nowymodelZu, zu1);
+	nowymodelZu->applyTransform();
+
+	auto nowymodelZu2 = std::make_shared<CModel3D>();
+	nowymodelZu2->setLabel("*transformation");
+	nowymodelZu2->setTransform(tZuR);
+	AP::OBJECT::addChild(nowymodelSz, nowymodelZu2);
+	AP::OBJECT::addChild(nowymodelZu2, zu1);
+	AP::WORKSPACE::removeModel(nowymodelZu);
+
+	oklu = liczOkluzje(sz1, zu1, dist2);
+
+	oklu->setLabel(QString("okluzja: %1mm").arg(dist2));
+	oklu->calcFN();
+
+	AP::OBJECT::addChild(nowymodelZu2, oklu);
+
+	szcz = sz1;
+	szcz_parent = std::dynamic_pointer_cast<CModel3D>(szcz->getParentPtr());
+	zuch = zu1;
+
+	moj_widget->wybor_siatek->ustawSzczeke(szcz->getLabel());
+	moj_widget->wybor_siatek->ustawZuchwe(zuch->getLabel());
+	moj_widget->wybor_siatek->ustawOkluzje(oklu->getLabel());
+
+	//ustawiam pion w osi Z
+	nowymodelSz->transform().rotateAroundAxisDeg(CVector3d::XAxis(), 90.0);
+
+	//std::shared_ptr<CModel3D> obj = std::make_shared<CModel3D>();
+	//obj->addChild(obj, oklu);
+	//obj->importChildrenGeometry();
+	//obj->setLabel("*transformation");
+	//obj->setTransform(tZuR1);
+
+	//std::shared_ptr<CBaseObject> sP = szcz->getParentPtr();
+	//if (sP)
+	//{
+	//	AP::OBJECT::addChild(sP, obj);
+	//}
+	//else
+	//{
+	//	AP::WORKSPACE::addModel(obj);
+	//}
+
+
+	
+	//CTransform tZuRinv(mZuR.inverse());
+
+	//if (dane_z_pomiaru)
+	//{
+	//	zu1->applyTransformation(nullT, tZuR);
+	//}
+
+	//CTransform invT = (Eigen::Matrix4d)(mZu.inverse() * mSz);
+
+
+	//std::shared_ptr<CBaseObject> zP = zuch->getParentPtr();
+	//std::shared_ptr<CBaseObject> sP = szcz->getParentPtr();
+
+	//if (dane_z_pomiaru)
+	//{
+	//	if (sP)
+	//	{
+	//		AP::OBJECT::addChild(sP, oklu);
+	//	}
+	//	else
+	//	{
+	//		AP::WORKSPACE::addObject(oklu);
+	//	}
+	//}
+	//else
+	//{
+	//	std::shared_ptr<CModel3D> obj = std::make_shared<CModel3D>();
+	//	obj->addChild(obj, oklu);
+	//	obj->importChildrenGeometry();
+	//	obj->setLabel("*transformation");
+	//	obj->setTransform(tZuRinv);
+	//	if (sP)
+	//	{
+	//		AP::OBJECT::addChild(sP, obj);
+	//	}
+	//	else
+	//	{
+	//		AP::WORKSPACE::addModel(obj);
+	//	}
+	//}
+
+	c.setShape(Qt::CursorShape::ArrowCursor);
+	moj_widget->setCursor(c);
+
+	UI::updateAllViews();
+}
+
+
 void ConcretePlugin::etap01(int div)
 {
 	if (oklu == nullptr || szcz == nullptr)
@@ -408,9 +708,9 @@ void ConcretePlugin::etap01(int div)
 
 		m_cutPlane->setCenter(bb.getMidpoint());
 
-		CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka_okluzja->getData())->getMainNormalVector();
-		n2.x = 0.0;
-		n2.y = 0.0;
+		CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka_okluzja->getData())->getMainNormalVector(true);
+		//n2.x = 0.0;
+		//n2.y = 0.0;
 
 		m_cutPlane->setNormal(n2);
 	}
@@ -949,6 +1249,22 @@ void ConcretePlugin::showMainPanel()
 		}
 		});
 
+	QObject::connect(moj_widget->wybor_siatek->btLiczOkluAg, &QPushButton::clicked, [&]() {
+		if (szcz && zuch) {
+			bool dane_z_pomiaru = moj_widget->wybor_siatek->zPomiaru->isChecked();
+
+			etap00ag(moj_widget->wybor_siatek->okluDist->value(), dane_z_pomiaru);
+
+			moj_widget->wybor_siatek->ustawOkluzje(oklu->getLabel());
+
+			if (szcz && oklu) {
+				moj_widget->etap11->setEnabled(true);
+				moj_widget->przytnij_szczene->setEnabled(true);
+			}
+		}
+		});
+
+
 	moj_layout->addRow(moj_widget->wybor_siatek);
 
 	moj_widget->przytnij_szczene = new WidgetPrzytnijSzczeke();
@@ -1294,6 +1610,8 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 	UI::PROGRESSBAR::init(0, 100, 0);
 	UI::PROGRESSBAR::setText("Budowa stempla");
 
+	qInfo() << "Tworzenie stempla...";	
+
 	// kopia klocka do p�niejszego wyciskania
 	auto kopia = stempel;
 
@@ -1306,6 +1624,8 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 	VoxelGrid dilatedKopia;
 	dylatacja(kopia, dilatedKopia, 3.0);
 
+	qInfo() << "Tworzenie stempla... #2";
+
 	UI::PROGRESSBAR::setValue(20);
 
 	VoxelGrid imprint;
@@ -1314,6 +1634,7 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 	// tu robi� odcisk tej pogrubionej kopii
 	imprint.diff_of(stempel, dilatedKopia);
 
+	qInfo() << "Tworzenie stempla... #3";
 
 	UI::PROGRESSBAR::setValue(30);
 
@@ -1577,6 +1898,7 @@ std::shared_ptr<CMesh> ConcretePlugin::stampFromMesh(std::shared_ptr<CMesh> mesh
 		VoxelGrid vox_okluzja = rasterizeMeshToVoxels(mesh->vertices(), mesh->faces(), 0.1);
 		VoxelGrid vox_stempel;
 
+		qInfo() << "Rasteryzacja zako�czona. X:" << vox_okluzja.dimX << " Y:" << vox_okluzja.dimY << " Z:" << vox_okluzja.dimZ;
 		createStempel(vox_okluzja, vox_stempel);
 
 		auto vol = createVolumetric(vox_stempel);
@@ -1617,6 +1939,8 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 
 	UI::PROGRESSBAR::init(0, wierzch->vertices().size(), 0);
 	UI::PROGRESSBAR::setText("Imprinting:");
+	
+	qInfo() << "Imprinting " << wierzch->getLabel() << " with " << stempel->getLabel();
 
 	int last_i = 0;
 	for (int i = 0; i < wierzch->vertices().size(); i++) {
@@ -2286,7 +2610,11 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 	std::vector<CEdge> boundaryEdges;
 	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> boundaryGraph;
 
+	qInfo() << "Znajdowanie krawedzi brzegowych...";
+
 	findBoundaryEdgesWithDirection(faces, boundaryEdges, boundaryGraph);
+
+	qInfo() << "Znaleziono krawedzi brzegowych:" << boundaryEdges.size();
 
 	UI::PROGRESSBAR::setValue(10);
 

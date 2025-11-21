@@ -18,7 +18,7 @@ public:
 	QPushButton* btSzcz;
 	QPushButton* btZuch;
 	QPushButton* btOklu;
-	QPushButton* btLiczOklu;
+	QPushButton* btLiczOklu, *btLiczOkluAg;
 	QDoubleSpinBox* okluDist;
 	QGroupBox* rodzajDanych;
 	QRadioButton* zPomiaru;
@@ -59,6 +59,7 @@ public:
 		btZuch = new QPushButton("...");
 		btOklu = new QPushButton("...");
 		btLiczOklu = new QPushButton(QString::fromUtf8("generate occlusion mesh"));
+		btLiczOkluAg = new QPushButton(QString::fromUtf8("generate occlusion mesh (test)"));
 		okluDist = new QDoubleSpinBox();
 		okluDist->setValue(2.0);
 
@@ -81,6 +82,7 @@ public:
 		l->addRow(okluDistLabel, okluDist);
 
 		l->addRow(btLiczOklu);
+		l->addRow(btLiczOkluAg);
 
 		enableLiczOklu(false);
 
@@ -91,6 +93,7 @@ public:
 		okluDistLabel->setEnabled(b);
 		okluDist->setEnabled(b);
 		btLiczOklu->setEnabled(b);
+		btLiczOkluAg->setEnabled(b);
 	}
 
 	void ustawSzczeke(QString label) {
