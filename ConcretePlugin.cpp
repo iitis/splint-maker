@@ -57,6 +57,8 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 {
 	std::set<size_t> good;
 
+	// ZAKŁADAMY ŻE JUŻ SĄ WE WSPÓLNYM UKŁADZIE WSPÓŁZĘDNYCH
+	// 
 	//auto szczeka = std::dynamic_pointer_cast<CMesh>(szczeka1->getCopy());
 	//auto zuchwa = std::dynamic_pointer_cast<CMesh>(zuchwa1->getCopy());
 
@@ -80,22 +82,27 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 	int progress = 0;
 
 #pragma omp parallel for
-	for (long idx = 0; idx < szczeka->vertices().size(); idx++)
-	{
-		CVertex& v = szczeka->vertices()[idx];
+for (long idx = 0; idx < szczeka->vertices().size(); idx++)
+{
+    CVertex& v = szczeka->vertices()[idx];
+    
+    if (kd->is_any_in_distance_to_pt(dist,v))
+    {
+        #pragma omp critical
+        {
+            good.insert(idx);
+        }
+    }
 
-		if (kd->is_any_in_distance_to_pt(dist,v))
-			good.insert(idx);
+    #pragma omp atomic
+    progress++;
 
-#pragma omp atomic
-		progress++;
+    #pragma omp critical
+    {
+        emit setProgressBarValue(progress);
+    }
 
-#pragma omp critical
-		{
-			emit setProgressBarValue(progress);
-		}
-
-	}
+}
 
 	zuchwa->removeKDtree();
 	UI::PROGRESSBAR::hide();
@@ -1024,9 +1031,6 @@ void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 
 	//delete szczeka_obj;
 }
-
-
-
 
 
 
