@@ -49,13 +49,15 @@ class DPVISION_DLL_API ConcretePlugin : public QObject, public PluginInterface
 	QWidget *panel, *subpanel;
 	QFormLayout *moj_layout;
 
+	bool testyAG = true;
+
 	MojWidget* moj_widget;
 
 	bool m_picking;
 	std::shared_ptr<BiteSim> symulator;
 
 	std::shared_ptr<CAnnotationPlane> m_cutPlane;
-	std::shared_ptr<CAnnotationPlane> m_plaszczyzna_rzutowania;
+	std::shared_ptr<CAnnotationPlane> m_projectionPlane;
 
 	int m_divider;
 	CzekamNa waiting_for;
@@ -92,7 +94,6 @@ public:
 	 * @return Resulting mesh.
 	 */
 	std::shared_ptr<CMesh> liczOkluzje(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist);
-	std::shared_ptr<CMesh> liczOkluzje2(std::shared_ptr<CMesh> szczeka1, std::shared_ptr<CMesh> zuchwa1, double dist);
 
 	/**
 	 * @brief Merges two meshes, optionally inverting one.

@@ -36,8 +36,9 @@ public:
 
 		rodzajDanych = new QGroupBox(QString::fromUtf8("The lower jaw model is originally in position:"));
 		zPomiaru = new QRadioButton(QString::fromUtf8("therapeutic"));
-		zPomiaru->setChecked(true);
 		zObliczen = new QRadioButton(QString::fromUtf8("zero"));
+		//zPomiaru->setChecked(true);
+		zObliczen->setChecked(true);
 		QHBoxLayout* hl = new QHBoxLayout();
 		hl->addWidget(zObliczen);
 		hl->addWidget(zPomiaru);
@@ -61,7 +62,7 @@ public:
 		btLiczOklu = new QPushButton(QString::fromUtf8("generate occlusion mesh"));
 		btLiczOkluAg = new QPushButton(QString::fromUtf8("generate occlusion mesh (test)"));
 		okluDist = new QDoubleSpinBox();
-		okluDist->setValue(2.0);
+		okluDist->setValue(5.0);
 
 		QFormLayout* l = new QFormLayout(this);
 		l->addRow(infoLabel00);

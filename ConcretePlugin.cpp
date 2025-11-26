@@ -44,6 +44,7 @@ ConcretePlugin::ConcretePlugin(void)
 	symulator = nullptr;
 
 	m_cutPlane = nullptr;
+	m_projectionPlane = nullptr;
 
 	m_divider = 10;
 
@@ -143,96 +144,6 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 	return okluzja;
 }
 
-std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje2(std::shared_ptr<CMesh>  szczeka1, std::shared_ptr<CMesh>  zuchwa1, double dist = 3.0)
-{
-	std::set<size_t> good;
-
-	auto szczeka = std::dynamic_pointer_cast<CMesh>(szczeka1->getCopy());
-	auto zuchwa = std::dynamic_pointer_cast<CMesh>(zuchwa1->getCopy());
-
-	auto _sM = CBaseObject::getGlobalTransformationMatrix(szczeka1);
-	auto _zM = CBaseObject::getGlobalTransformationMatrix(zuchwa1);
-
-	auto _sT = CTransform(_sM);
-	auto _zT = CTransform(_zM);
-	auto nullT = CTransform();
-
-	//transformacja szczeki do ukladu zuchwy
-	szczeka->applyTransformation(_sT, nullT);
-	//transformacja zuchwy do ukladu zuchwy (tożsama)
-	zuchwa->applyTransformation(_zT, nullT);
-
-	CMesh::KDtree* kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
-
-	UI::STATUSBAR::setText("Looking for unwanted vertices. Please wait...");
-	UI::PROGRESSBAR::init(0, szczeka->vertices().size(), 0);
-
-	int progress = 0;
-
-#pragma omp parallel for
-	for (long idx = 0; idx < szczeka->vertices().size(); idx++)
-	{
-		CVertex& v = szczeka->vertices()[idx];
-
-		if (kd->is_any_in_distance_to_pt(dist, v))
-			good.insert(idx);
-
-#pragma omp atomic
-		progress++;
-
-#pragma omp critical
-		{
-			emit setProgressBarValue(progress);
-		}
-
-	}
-
-	zuchwa->removeKDtree();
-	UI::PROGRESSBAR::hide();
-
-	std::shared_ptr<CMesh> okluzja = std::dynamic_pointer_cast<CMesh>(szczeka->getCopy());
-
-	UI::STATUSBAR::setText("Removing unwanted faces. Plese wait...");
-
-	std::vector<CFace>& faces = okluzja->faces();
-	std::vector<bool> toErase(faces.size(), false);
-
-	UI::PROGRESSBAR::init(0, faces.size(), 0);
-	progress = 0;
-
-#pragma omp parallel for
-	for (int idx = 0; idx < faces.size(); ++idx) {
-		CFace& f = faces[idx];
-
-		if ((good.find(f.A()) == good.end()) || (good.find(f.B()) == good.end()) || (good.find(f.C()) == good.end())) {
-			toErase[idx] = true;
-		}
-
-#pragma omp atomic
-		++progress;
-
-#pragma omp critical
-		{
-			emit setProgressBarValue(progress);
-		}
-	}
-
-	size_t idx = 0;
-	auto it = std::remove_if(faces.begin(), faces.end(),
-		[&toErase, &idx](const CFace&) {
-			return toErase[idx++];
-		});
-	faces.erase(it, faces.end());
-
-
-	okluzja->removeUnusedVertices();
-
-	UI::PROGRESSBAR::hide();
-
-	UI::STATUSBAR::setText("Ready!");
-
-	return okluzja;
-}
 
 
 std::shared_ptr<CMesh> meshWithKeyword(QString keyword, CObject::Children kids)
@@ -550,6 +461,7 @@ void ConcretePlugin::etap00ag(double dist2, bool dane_z_pomiaru)
 	CTransform tZu(mZu);
 	CTransform tZuR1(mZuR1);
 	CTransform tZuR(mZuR);
+	CTransform tZuRinv(mZuR.inverse());
 
 	auto nowymodelSz = std::make_shared<CModel3D>();
 	nowymodelSz->setLabel("Szczeka_global");
@@ -570,8 +482,9 @@ void ConcretePlugin::etap00ag(double dist2, bool dane_z_pomiaru)
 	nowymodelZu2->setLabel("*transformation");
 	nowymodelZu2->setTransform(tZuR);
 	AP::OBJECT::addChild(nowymodelSz, nowymodelZu2);
-	AP::OBJECT::addChild(nowymodelZu2, zu1);
-	AP::WORKSPACE::removeModel(nowymodelZu);
+	//AP::OBJECT::addChild(nowymodelZu2, zu1);
+
+
 
 	oklu = liczOkluzje(sz1, zu1, dist2);
 
@@ -579,6 +492,20 @@ void ConcretePlugin::etap00ag(double dist2, bool dane_z_pomiaru)
 	oklu->calcFN();
 
 	AP::OBJECT::addChild(nowymodelZu2, oklu);
+
+	auto nowymodelZu3 = std::make_shared<CModel3D>();
+	nowymodelZu3->setLabel("*transformation_inv");
+	nowymodelZu3->setTransform(tZuR);
+	AP::OBJECT::addChild(nowymodelSz, nowymodelZu3);
+	AP::OBJECT::addChild(nowymodelZu3, zu1);
+	//AP::OBJECT::addChild(nowymodelZu3, oklu);
+	nowymodelZu3->applyTransform();
+	nowymodelZu3->setTransform(tZuRinv);
+
+
+	AP::WORKSPACE::removeModel(nowymodelZu);
+
+
 
 	szcz = sz1;
 	szcz_parent = std::dynamic_pointer_cast<CModel3D>(szcz->getParentPtr());
@@ -591,64 +518,6 @@ void ConcretePlugin::etap00ag(double dist2, bool dane_z_pomiaru)
 	//ustawiam pion w osi Z
 	nowymodelSz->transform().rotateAroundAxisDeg(CVector3d::XAxis(), 90.0);
 
-	//std::shared_ptr<CModel3D> obj = std::make_shared<CModel3D>();
-	//obj->addChild(obj, oklu);
-	//obj->importChildrenGeometry();
-	//obj->setLabel("*transformation");
-	//obj->setTransform(tZuR1);
-
-	//std::shared_ptr<CBaseObject> sP = szcz->getParentPtr();
-	//if (sP)
-	//{
-	//	AP::OBJECT::addChild(sP, obj);
-	//}
-	//else
-	//{
-	//	AP::WORKSPACE::addModel(obj);
-	//}
-
-
-	
-	//CTransform tZuRinv(mZuR.inverse());
-
-	//if (dane_z_pomiaru)
-	//{
-	//	zu1->applyTransformation(nullT, tZuR);
-	//}
-
-	//CTransform invT = (Eigen::Matrix4d)(mZu.inverse() * mSz);
-
-
-	//std::shared_ptr<CBaseObject> zP = zuch->getParentPtr();
-	//std::shared_ptr<CBaseObject> sP = szcz->getParentPtr();
-
-	//if (dane_z_pomiaru)
-	//{
-	//	if (sP)
-	//	{
-	//		AP::OBJECT::addChild(sP, oklu);
-	//	}
-	//	else
-	//	{
-	//		AP::WORKSPACE::addObject(oklu);
-	//	}
-	//}
-	//else
-	//{
-	//	std::shared_ptr<CModel3D> obj = std::make_shared<CModel3D>();
-	//	obj->addChild(obj, oklu);
-	//	obj->importChildrenGeometry();
-	//	obj->setLabel("*transformation");
-	//	obj->setTransform(tZuRinv);
-	//	if (sP)
-	//	{
-	//		AP::OBJECT::addChild(sP, obj);
-	//	}
-	//	else
-	//	{
-	//		AP::WORKSPACE::addModel(obj);
-	//	}
-	//}
 
 	c.setShape(Qt::CursorShape::ArrowCursor);
 	moj_widget->setCursor(c);
@@ -703,16 +572,31 @@ void ConcretePlugin::etap01(int div)
 	if (m_cutPlane == nullptr) {
 		m_cutPlane = std::make_shared<CAnnotationPlane>();
 		m_cutPlane->setSize(80.0);
-		m_cutPlane->setLabel(L"plaszczyzna ciecia");
+		m_cutPlane->setLabel(L"cutting plane");
 		m_cutPlane->setColor(CRGBA(1.0f, 0.8f, 0.3f, 0.7f));
 
 		m_cutPlane->setCenter(bb.getMidpoint());
 
-		CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka_okluzja->getData())->getMainNormalVector(true);
-		//n2.x = 0.0;
-		//n2.y = 0.0;
+		CVector3d n2 = oklu->getMainNormalVector(true);
+		//CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka_okluzja->getData())->getMainNormalVector(true);
+		n2.x = 0.0;
+		n2.y = 0.0;
 
 		m_cutPlane->setNormal(n2);
+
+		if (testyAG) {
+			//tymczasowe - testowe ustawienie płaszczyzny ciecia
+			m_cutPlane->setCenter(CPoint3d(-4.715613, -54.49725, -37.67131));
+			m_cutPlane->setNormal(CVector3d(-0.030508, 0.347240, -0.937280).getNormalized());
+
+			//m_projectionPlane = std::make_shared<CAnnotationPlane>(m_cutPlane->getCenter(), m_cutPlane->getNormal());
+			//m_projectionPlane->setCenter(CPoint3d(-4.715613, -54.49725, -37.67131));
+			//m_projectionPlane->setNormal(CVector3d(-0.026998, 0.485099, -0.874042).getNormalized());
+
+			//m_projectionPlane->setSize(80);
+			//m_projectionPlane->setLabel(L"projection plane");
+			//AP::MODEL::addAnnotation(symulator->szczeka_obj, m_projectionPlane);
+		}
 	}
 
 	AP::MODEL::addAnnotation(symulator->szczeka_obj, m_cutPlane);
@@ -791,12 +675,19 @@ void ConcretePlugin::etap11()
 
 	AP::WORKSPACE::addModel(symulator->wnetrze->obj);
 
-	m_plaszczyzna_rzutowania = std::make_shared<CAnnotationPlane>(CPoint3d(0,0,0), CVector3d(0,0,1));
-	m_plaszczyzna_rzutowania->setSize(80);
+	if (m_projectionPlane == nullptr) {
+		m_projectionPlane = std::make_shared<CAnnotationPlane>(m_cutPlane->getCenter(), m_cutPlane->getNormal());
+		m_projectionPlane->setSize(80);
 
-	AP::OBJECT::addChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
+		if (testyAG) {
+			//tymczasowe - testowe ustawienie płaszczyzny projekcji
+			m_projectionPlane->setCenter(CPoint3d(10.0, 0.0, -20.0));
+		}
+
+		AP::OBJECT::addChild(symulator->wnetrze->obj, m_projectionPlane);
+	}
 	
-	symulator->wnetrze->obj->transform().fromQMatrix4x4(planeToTransform(m_cutPlane->getNormal()));
+	symulator->wnetrze->obj->transform().fromQMatrix4x4(planeToTransform(m_projectionPlane->getNormal()));
 	symulator->wnetrze->obj->transform().translate(CVector3d(CPoint3d(0),m_cutPlane->getCenter()));
 	
 	UI::updateAllViews();
@@ -845,7 +736,7 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 
 	UI::DOCK::WORKSPACE::update();
 
-	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
+	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_projectionPlane);
 
 	etap14();
 
@@ -893,7 +784,7 @@ void ConcretePlugin::reset_plugin()
 	symulator = nullptr;
 
 	m_cutPlane = nullptr;
-	m_plaszczyzna_rzutowania = nullptr;
+	m_projectionPlane = nullptr;
 
 	m_divider = 10;
 
@@ -982,14 +873,17 @@ void ConcretePlugin::wytlaczanie()
 	auto stmp = stampFromMesh(ok);
 
 	UI::STATUSBAR::setText("Impressing an occlusal stamp on the outer surface of the splint");
+	qInfo() << "Impressing an occlusal stamp on the outer surface of the splint";
 
 	zrobOdciskStempla(wi, stmp, 0.0);
 
 	UI::STATUSBAR::setText("Imprinting the lower jaw on the outer surface of the splint");
+	qInfo() << "Imprinting the lower jaw on the outer surface of the splint";
 
 	zrobOdciskStempla(wi, zu, 0.2);
 
 	UI::STATUSBAR::setText("Making holes at intersections");
+	qInfo() << "Making holes at intersections";
 
 	auto [wi2, wn2] = zrobDziury(wi, wn);
 
@@ -1624,8 +1518,6 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 	VoxelGrid dilatedKopia;
 	dylatacja(kopia, dilatedKopia, 3.0);
 
-	qInfo() << "Tworzenie stempla... #2";
-
 	UI::PROGRESSBAR::setValue(20);
 
 	VoxelGrid imprint;
@@ -1633,8 +1525,6 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 
 	// tu robi� odcisk tej pogrubionej kopii
 	imprint.diff_of(stempel, dilatedKopia);
-
-	qInfo() << "Tworzenie stempla... #3";
 
 	UI::PROGRESSBAR::setValue(30);
 
@@ -1929,6 +1819,8 @@ std::shared_ptr<CMesh> ConcretePlugin::stampFromMesh(std::shared_ptr<CMesh> mesh
 void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> stempel, double _distMax)
 {
 	//	unsigned long t1 = GetTickCount();
+
+	qInfo() << "Odcisk stempla, tworze KDTree. Stempel: " << stempel->faces().size() << " scianek.";
 
 	KDNode2* tree = KDNode2::build(stempel.get(), 10240);
 	KDNode2::HitMap hmap;
