@@ -112,10 +112,12 @@ public:
 
 	void etap01(int div);
 	void etap11();
-    void etap123(double dValIn, double dValOut);
+	void etap123(double dValIn, double dValOut);
     void reset_plugin();
     void wytlaczanie();
     void etap14();
+
+	void etap14_nowy();
 
 	void save_all();
 

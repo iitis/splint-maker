@@ -3,6 +3,128 @@
 
 #include "../api/UI.h"
 
+
+// Nowa metoda - usuwa tylko te zerowe ścianki z wnętrza, które NIE mają odpowiednika w wierzchu
+void BiteSim::usunNiepasujaceZeroweSciankiWnetrza()
+{
+	if (!wnetrze || !wierzch) {
+		qWarning() << "usunNiepasujaceZeroweScianki: NULL pointer!";
+		return;
+	}
+
+	std::shared_ptr<CMesh> rzutnia_wnetrze = std::dynamic_pointer_cast<CMesh>(wnetrze->obj->getData());
+	std::shared_ptr<CMesh> rzutnia_wierzch = std::dynamic_pointer_cast<CMesh>(wierzch->obj->getData());
+
+	if (!rzutnia_wnetrze || !rzutnia_wierzch) {
+		qWarning() << "usunNiepasujaceZeroweScianki: Failed to get mesh data!";
+		return;
+	}
+
+	double prog = wnetrze->pMin.Z() + 0.1;
+
+	qInfo() << "=== Usuwanie niespasujacych zerowych scianek ===";
+	qInfo() << "Wnetrze: faces=" << rzutnia_wnetrze->faces().size()
+		<< ", vertices=" << rzutnia_wnetrze->vertices().size();
+	qInfo() << "Wierzch: faces=" << rzutnia_wierzch->faces().size()
+		<< ", vertices=" << rzutnia_wierzch->vertices().size();
+
+	// 1. Zbuduj mapę współrzędnych (ix, iy) wierzchołków z wierzchu, które mają Z > prog
+	std::set<std::pair<int, int>> wierzchNonZeroCoords;
+
+	for (int i = 0; i < rzutnia_wierzch->vertices().size(); i++)
+	{
+		const CVertex& v = rzutnia_wierzch->vertices()[i];
+
+		if (v.Z() > prog)
+		{
+			int ix = round(v.X() * wierzch->div);
+			int iy = round(v.Y() * wierzch->div);
+			wierzchNonZeroCoords.insert(std::pair<int, int>(ix, iy));
+		}
+	}
+
+	qInfo() << "Wierzch ma" << wierzchNonZeroCoords.size() << "nie-zerowych wierzcholkow (Z > " << prog << ")";
+
+	// 2. Sprawdź ścianki wnętrza
+	std::vector<CFace> newFaces;
+	std::vector<CVector3f> newNormals;
+
+	newFaces.reserve(rzutnia_wnetrze->faces().size());
+	newNormals.reserve(rzutnia_wnetrze->faces().size());
+
+	int removed_zero_without_match = 0;
+	int kept_zero_with_match = 0;
+	int kept_nonzero = 0;
+
+	for (int i = 0; i < rzutnia_wnetrze->faces().size(); i++)
+	{
+		const CFace& f = rzutnia_wnetrze->faces()[i];
+		const CVertex& vA = rzutnia_wnetrze->vertices()[f.A()];
+		const CVertex& vB = rzutnia_wnetrze->vertices()[f.B()];
+		const CVertex& vC = rzutnia_wnetrze->vertices()[f.C()];
+
+		// Jeśli przynajmniej jeden wierzchołek ma Z > prog, ZAWSZE zachowaj
+		if (vA.Z() > prog || vB.Z() > prog || vC.Z() > prog)
+		{
+			newFaces.push_back(f);
+			
+			newNormals.push_back(f.getNormal(rzutnia_wnetrze->vertices()));
+			kept_nonzero++;
+			continue;
+		}
+
+		// Wszystkie wierzchołki mają Z <= prog (są "zerowe")
+		// Sprawdź czy którykolwiek ma odpowiednik w wierzchu
+
+		int ixA = round(vA.X() * wnetrze->div);
+		int iyA = round(vA.Y() * wnetrze->div);
+		int ixB = round(vB.X() * wnetrze->div);
+		int iyB = round(vB.Y() * wnetrze->div);
+		int ixC = round(vC.X() * wnetrze->div);
+		int iyC = round(vC.Y() * wnetrze->div);
+
+		bool hasMatchInWierzch =
+			wierzchNonZeroCoords.count(std::pair<int, int>(ixA, iyA)) ||
+			wierzchNonZeroCoords.count(std::pair<int, int>(ixB, iyB)) ||
+			wierzchNonZeroCoords.count(std::pair<int, int>(ixC, iyC));
+
+		if (hasMatchInWierzch)
+		{
+			// Zachowaj zerową ściankę, bo ma odpowiednik w wierzchu
+			newFaces.push_back(f);
+			newNormals.push_back(f.getNormal(rzutnia_wnetrze->vertices()));
+			kept_zero_with_match++;
+		}
+		else
+		{
+			// Usuń zerową ściankę bez odpowiednika
+			removed_zero_without_match++;
+		}
+	}
+
+	qInfo() << "Statystyki:";
+	qInfo() << "  - zachowano niezerowych scianek:" << kept_nonzero;
+	qInfo() << "  - zachowano zerowych z odpowiednikiem:" << kept_zero_with_match;
+	qInfo() << "  - usunieto zerowych bez odpowiednika:" << removed_zero_without_match;
+	qInfo() << "  - razem scianek po obrobce:" << newFaces.size();
+
+	// 3. Zastąp ścianki
+	rzutnia_wnetrze->faces() = newFaces;
+	rzutnia_wnetrze->fnormals() = newNormals;
+
+	// 4. Usuń nieużywane wierzchołki
+	int vertices_before = rzutnia_wnetrze->vertices().size();
+	rzutnia_wnetrze->removeUnusedVertices();
+	int vertices_after = rzutnia_wnetrze->vertices().size();
+
+	qInfo() << "Usunieto" << (vertices_before - vertices_after) << "nieuzywanych wierzcholkow";
+	qInfo() << "===================================";
+
+	UI::updateAllViews();
+}
+
+
+
 void BiteSim::create_inner_surface(CSiateczka1* wnetrze, float d)
 {
 	if ((NULL == wnetrze) || (NULL == wnetrze->obj)) return;
@@ -35,15 +157,9 @@ void BiteSim::create_inner_surface(CSiateczka1* wnetrze, float d)
 
 	wnetrze->zrobWycisk2(szczeka_zeby);
 
-	wnetrze->klejDziury3();
-
-
-	wnetrze->usunNadmiaroweScianki();
-
-	qInfo() << "TEST1";
+	//wnetrze->usunSkrajneScianki();
 
 	wnetrze->odwrocNormalne();
-	qInfo() << "TEST2";
 }
 
 
@@ -78,8 +194,7 @@ void BiteSim::create_outer_surface(double dVal, std::shared_ptr<CMesh> zuch)
 	// wyciskam rozepchana powierzchnie szczęki + powierzchnie okluzji
 	wierzch->zrobWyciskSumy4(szczeka_zeby, szczeka_okluzja, false);
 
-	wierzch->klejDziury3();
-	wierzch->usunNadmiaroweScianki();
+	wierzch->usunSkrajneScianki();
 }
 
 void BiteSim::szczeka_inicjuj2(std::shared_ptr<CMesh> mesh)

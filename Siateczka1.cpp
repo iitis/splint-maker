@@ -829,3 +829,130 @@ void CSiateczka1::usunNadmiaroweScianki()
 
 	UI::updateAllViews();
 }
+
+#include <queue>
+
+void CSiateczka1::usunSkrajneScianki()
+{
+	std::shared_ptr<CMesh> rzutnia = std::dynamic_pointer_cast<CMesh>(obj->getData());
+
+	double prog = pMin.Z() + 0.1;
+
+	// 1. Znajdź wszystkie zerowe wierzchołki
+	std::set<std::pair<int, int>> zeroVertices;
+	for (int iy = sMinY; iy <= sMaxY; iy++)
+	{
+		for (int ix = sMinX; ix <= sMaxX; ix++)
+		{
+			if (siateczka.end() == siateczka.find(std::pair<int, int>(ix, iy)))
+			{
+				zeroVertices.insert(std::pair<int, int>(ix, iy));
+			}
+		}
+	}
+
+	// 2. Flood-fill od brzegów - oznacz zewnętrzne obszary zerowe (ITERACYJNIE)
+	std::set<std::pair<int, int>> outerZeros;
+	std::queue<std::pair<int, int>> toProcess;
+
+	// Funkcja pomocnicza do dodawania punktu do kolejki
+	auto tryAddToQueue = [&](int ix, int iy) {
+		// NAJPIERW sprawdzamy granice
+		if (ix < sMinX || ix > sMaxX || iy < sMinY || iy > sMaxY) return;
+
+		std::pair<int, int> coord(ix, iy);
+
+		// Sprawdź czy już przetworzony
+		if (outerZeros.count(coord)) return;
+
+		// Sprawdź czy to zerowy wierzchołek
+		if (zeroVertices.count(coord)) {
+			outerZeros.insert(coord);
+			toProcess.push(coord);
+		}
+		};
+
+	// Uruchom flood-fill od wszystkich brzegów
+	for (int iy = sMinY; iy <= sMaxY; iy++)
+	{
+		tryAddToQueue(sMinX, iy);
+		tryAddToQueue(sMaxX, iy);
+	}
+	for (int ix = sMinX; ix <= sMaxX; ix++)
+	{
+		tryAddToQueue(ix, sMinY);
+		tryAddToQueue(ix, sMaxY);
+	}
+
+	// Przetwarzaj kolejkę iteracyjnie
+	while (!toProcess.empty())
+	{
+		auto current = toProcess.front();
+		toProcess.pop();
+
+		int ix = current.first;
+		int iy = current.second;
+
+		// Sprawdź 4 sąsiadów
+		tryAddToQueue(ix + 1, iy);
+		tryAddToQueue(ix - 1, iy);
+		tryAddToQueue(ix, iy + 1);
+		tryAddToQueue(ix, iy - 1);
+	}
+
+	// 2a. PODNIEŚ WEWNĘTRZNE ZEROWE WIERZCHOŁKI O 1.0mm
+	for (const auto& coord : zeroVertices)
+	{
+		// Jeśli wierzchołek NIE jest w outerZeros, to jest wewnętrzny
+		if (outerZeros.count(coord) == 0)
+		{
+			int ix = coord.first;
+			int iy = coord.second;
+
+			// Pobierz wskaźnik do wierzchołka i podnieś go o 1.0
+			CVertex* v = &rzutnia->vertices()[vIndex(ix, iy)];
+			v->Z(v->Z() + 1.0);
+
+			// Dodaj do mapy siateczki, żeby był traktowany jako "wypełniony"
+			siateczka[coord] = v;
+		}
+	}
+
+	// 3. Usuń ścianki zawierające zewnętrzne zerowe wierzchołki
+	std::vector<CFace> newFaces;
+	std::vector<CVector3f> newNormals;
+
+	for (int i = 0; i < rzutnia->faces().size(); i++)
+	{
+		CFace f = rzutnia->faces()[i];
+		CVertex& vA = rzutnia->vertices()[f.A()];
+		CVertex& vB = rzutnia->vertices()[f.B()];
+		CVertex& vC = rzutnia->vertices()[f.C()];
+
+		// Znajdujemy współrzędne siatki dla każdego wierzchołka
+		int ixA = round(vA.X() * div);
+		int iyA = round(vA.Y() * div);
+		int ixB = round(vB.X() * div);
+		int iyB = round(vB.Y() * div);
+		int ixC = round(vC.X() * div);
+		int iyC = round(vC.Y() * div);
+
+		bool isOuterA = outerZeros.count(std::pair<int, int>(ixA, iyA));
+		bool isOuterB = outerZeros.count(std::pair<int, int>(ixB, iyB));
+		bool isOuterC = outerZeros.count(std::pair<int, int>(ixC, iyC));
+
+		// Zachowaj ściankę jeśli żaden wierzchołek nie jest zewnętrzny ALBO przynajmniej jeden ma Z > prog
+		if ((!isOuterA && !isOuterB && !isOuterC) || (vA.Z() > prog || vB.Z() > prog || vC.Z() > prog))
+		{
+			newFaces.push_back(f);
+			newNormals.push_back(f.getNormal(rzutnia->vertices()));
+		}
+	}
+
+	rzutnia->faces() = newFaces;
+	rzutnia->fnormals() = newNormals;
+
+	rzutnia->removeUnusedVertices();
+
+	UI::updateAllViews();
+}

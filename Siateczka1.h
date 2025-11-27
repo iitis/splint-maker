@@ -47,6 +47,8 @@ public:
 	void klejDziury3();
 	void usunNadmiaroweScianki();
 
+	void usunSkrajneScianki();
+
 	inline size_t vIndex(int x, int y)
 	{
 		return ( (x-sMinX) * ( sMaxY - sMinY + 2 ) + (y-sMinY) );

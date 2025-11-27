@@ -593,7 +593,7 @@ void ConcretePlugin::etap01(int div)
 
 		if (testyAG) {
 			//tymczasowe - testowe ustawienie płaszczyzny ciecia
-			m_cutPlane->setCenter(CPoint3d(-4.715613, -54.49725, -37.67131));
+			m_cutPlane->setCenter(CPoint3d(-4.7, -54.5, -39.0));
 			m_cutPlane->setNormal(CVector3d(-0.030508, 0.347240, -0.937280).getNormalized());
 
 			//m_projectionPlane = std::make_shared<CAnnotationPlane>(m_cutPlane->getCenter(), m_cutPlane->getNormal());
@@ -710,6 +710,10 @@ void ConcretePlugin::etap11()
 	moj_widget->setCursor(c);
 }
 
+
+
+
+
 void ConcretePlugin::etap123(double dValIn, double dValOut)
 {
 	moj_widget->etap123->setDisabled(true);
@@ -721,6 +725,7 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 	qInfo() << "etap12 -> symulator->generujWnetrzeNEW()";
 
 	symulator->create_inner_surface(symulator->wnetrze, dValIn);
+
 	mesh_wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
 
 
@@ -745,7 +750,12 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 
 	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_projectionPlane);
 
-	etap14();
+	// selektywne usuwanie zerowych ścianek z wnętrza
+	// (wierzch już ma usunięte skrajne ścianki dzięki usunSkrajneScianki())
+	qInfo() << "Selektywne usuwanie zerowych scianek z wnetrza...";
+	symulator->usunNiepasujaceZeroweSciankiWnetrza();
+
+	etap14_nowy();
 
 	wytlaczanie();
 
@@ -892,7 +902,11 @@ void ConcretePlugin::wytlaczanie()
 	UI::STATUSBAR::setText("Making holes at intersections");
 	qInfo() << "Making holes at intersections";
 
+	return;
+
+
 	auto [wi2, wn2] = zrobDziury(wi, wn);
+
 
 	UI::STATUSBAR::setText("Bridging the outer and inner surfaces");
 
@@ -1000,6 +1014,30 @@ void ConcretePlugin::etap14()
 	std::shared_ptr<CMesh> wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
 
 	decapitation(wnetrze, m_cutPlane);
+
+	//----------------------------------------------------------------
+
+	AP::OBJECT::removeChild(symulator->szczeka_obj, m_cutPlane);
+
+	UI::DOCK::WORKSPACE::update();
+}
+
+
+void ConcretePlugin::etap14_nowy()
+{
+	//symulator->wierzch->obj->applyTransform();
+
+	//std::shared_ptr<CMesh> wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
+
+	//decapitation(wierzch, m_cutPlane);
+
+	////----------------------------------------------------------------
+
+	//symulator->wnetrze->obj->applyTransform();
+
+	//std::shared_ptr<CMesh> wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
+
+	//decapitation(wnetrze, m_cutPlane);
 
 	//----------------------------------------------------------------
 
@@ -2023,6 +2061,8 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 
 		UI::PROGRESSBAR::setValue(20);
 
+		qInfo() << "--- szukanie przeciec...";
+
 		przeciecia(wierzch_nowy, wnetrze_nowe);
 
 		UI::PROGRESSBAR::init(0, 30, 0);
@@ -2416,7 +2456,7 @@ std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, 
 
 #include <queue>
 
-std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& graph)
+std::vector<INDEX_TYPE> findShortestCycleFrom_BAK(INDEX_TYPE start, const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& graph)
 {
 	std::queue<std::vector<INDEX_TYPE>> q;
 	std::unordered_set<INDEX_TYPE> visited;
@@ -2449,11 +2489,55 @@ std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unord
 	return {}; // brak cyklu
 }
 
+std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& graph)
+{
+	std::queue<std::pair<INDEX_TYPE, INDEX_TYPE>> q; // (current, parent)
+	std::unordered_map<INDEX_TYPE, INDEX_TYPE> parent;
+	std::unordered_set<INDEX_TYPE> visited;
+
+	q.push({ start, (INDEX_TYPE)-1 });
+	visited.insert(start);
+
+	while (!q.empty()) {
+		auto [current, prev] = q.front();
+		q.pop();
+
+		auto it = graph.find(current);
+		if (it == graph.end())
+			continue;
+
+		for (INDEX_TYPE neighbor : it->second) {
+			// Znaleziono cykl
+			if (neighbor == start && parent.size() >= 2) {
+				std::vector<INDEX_TYPE> path;
+				path.push_back(start);
+				INDEX_TYPE node = current;
+				while (node != start) {
+					path.push_back(node);
+					node = parent[node];
+				}
+				path.push_back(start);
+				std::reverse(path.begin(), path.end());
+				return path;
+			}
+
+			// Pomiń rodzica (unikamy natychmiastowego powrotu)
+			if (neighbor == prev)
+				continue;
+
+			if (visited.find(neighbor) == visited.end()) {
+				visited.insert(neighbor);
+				parent[neighbor] = current;
+				q.push({ neighbor, current });
+			}
+		}
+	}
+
+	return {}; // brak cyklu
+}
 
 
-
-
-std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges(const std::vector<CEdge>& boundaryEdges)
+std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges_BAK(const std::vector<CEdge>& boundaryEdges)
 {
 	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> graph;
 	std::unordered_set<INDEX_TYPE> vertices_remains;
@@ -2489,6 +2573,44 @@ std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges(const std::vecto
 	return loops;
 }
 
+
+std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges(const std::vector<CEdge>& boundaryEdges)
+{
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> graph;
+	std::unordered_set<INDEX_TYPE> vertices_remains;
+
+	// Budowa grafu z rezerwacją pamięci
+	graph.reserve(boundaryEdges.size() * 2);
+	vertices_remains.reserve(boundaryEdges.size() * 2);
+
+	for (const CEdge& edge : boundaryEdges) {
+		graph[edge.first].push_back(edge.second);
+		vertices_remains.insert(edge.first);
+		vertices_remains.insert(edge.second);
+	}
+
+	std::vector<std::vector<INDEX_TYPE>> loops;
+	loops.reserve(vertices_remains.size() / 10); // estymacja liczby pętli
+
+	while (!vertices_remains.empty()) {
+		INDEX_TYPE current = *vertices_remains.begin();
+		std::vector<INDEX_TYPE> path = findShortestCycleFrom(current, graph);
+
+		if (path.empty()) {
+			vertices_remains.erase(current);
+		}
+		else {
+			loops.push_back(std::move(path));
+
+			// Usuwanie wszystkich wierzchołków z pętli naraz
+			for (INDEX_TYPE p : loops.back()) {
+				vertices_remains.erase(p);
+			}
+		}
+	}
+
+	return loops;
+}
 
 
 #include "AnnotationEdges.h"
