@@ -902,7 +902,7 @@ void ConcretePlugin::wytlaczanie()
 	UI::STATUSBAR::setText("Making holes at intersections");
 	qInfo() << "Making holes at intersections";
 
-	return;
+	//return;
 
 
 	auto [wi2, wn2] = zrobDziury(wi, wn);
