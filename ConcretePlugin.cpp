@@ -900,7 +900,7 @@ void ConcretePlugin::wytlaczanie()
 	zrobOdciskStempla(wi, zu, 0.2);
 
 	UI::STATUSBAR::setText("Making holes at intersections");
-	qInfo() << "Making holes at intersections";
+	qInfo() << "Making holes at intersections" << endl;
 
 	//return;
 
@@ -1950,27 +1950,68 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 #include "AnnotationSetOfFaces.h"
 #include "triangulacja.h"
 
+//void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
+//
+//	std::map<INDEX_TYPE, std::set<INDEX_TYPE>*> crossed;
+//
+//	if (CollisionDetector::getIntersectionOfMeshWithMesh3d(mesh1, mesh2, crossed))
+//	{
+//		auto ed = std::make_shared<CAnnotationEdges>();
+//
+//		SplitTriangles2(mesh1, mesh2, crossed, *ed);
+//
+//		AP::OBJECT::addChild(mesh1, ed);
+//
+//		UI::STATUSBAR::setText("Ready. You can see sugested faces.");
+//	}
+//	else
+//	{
+//		UI::STATUSBAR::setText("No intersections found");
+//	}
+//
+//
+//
+//}
+
 void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
+	qInfo() << "=== PRZECIECIA: START ===";
+	qInfo() << "Mesh1: faces=" << mesh1->faces().size() << ", vertices=" << mesh1->vertices().size();
+	qInfo() << "Mesh2: faces=" << mesh2->faces().size() << ", vertices=" << mesh2->vertices().size();
 
 	std::map<INDEX_TYPE, std::set<INDEX_TYPE>*> crossed;
 
+	qInfo() << "Wykrywanie kolizji...";
+	UI::PROGRESSBAR::init(0, 100, 0);
+	UI::PROGRESSBAR::setText("Detecting intersections...");
+	UI::PROGRESSBAR::setValue(10);
+
 	if (CollisionDetector::getIntersectionOfMeshWithMesh3d(mesh1, mesh2, crossed))
 	{
+		qInfo() << "Znaleziono przeciec:" << crossed.size();
+
+		UI::PROGRESSBAR::setValue(50);
+		UI::PROGRESSBAR::setText("Splitting triangles...");
+
 		auto ed = std::make_shared<CAnnotationEdges>();
 
+		qInfo() << "Rozdzielanie trojkatow...";
 		SplitTriangles2(mesh1, mesh2, crossed, *ed);
 
+		qInfo() << "Dodawanie krawedzi...";
 		AP::OBJECT::addChild(mesh1, ed);
 
-		UI::STATUSBAR::setText("Ready. You can see sugested faces.");
+		UI::PROGRESSBAR::setValue(100);
+		UI::STATUSBAR::setText("Ready. You can see suggested faces.");
 	}
 	else
 	{
+		qInfo() << "Nie znaleziono przeciec";
+		UI::PROGRESSBAR::hide();
 		UI::STATUSBAR::setText("No intersections found");
 	}
 
-
-
+	UI::PROGRESSBAR::hide();
+	qInfo() << "=== PRZECIECIA: END ===";
 }
 
 
@@ -1978,14 +2019,85 @@ void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
 #include <omp.h>
 #include <mutex>
 
+//void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
+//{
+//	std::mutex mtx;
+//
+//	KDNode2* tree = KDNode2::build(stempel, 5000);
+//
+//	int last_i = 0;
+//
+//
+//#pragma omp parallel
+//	{
+//		std::set<INDEX_TYPE> local_set;
+//
+//#pragma omp for
+//		for (int i = 0; i < wierzch->vertices().size(); i++) {
+//
+//			CVertex p0 = wierzch->vertices()[i];
+//
+//			// punkt pocz�tkowy dla wyszukiwania
+//			CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
+//
+//			KDNode2::HitMap hmap;
+//			bool hit = tree->hit(stempel, p0mv, mv, hmap);
+//
+//			if (hit) {
+//				double dist = (*hmap.begin()).second.first;
+//				CPoint3d p1 = (*hmap.begin()).second.second;
+//				int idx = (*hmap.begin()).first;
+//
+//				if (hmap.size() > 1) {
+//					for (auto h : hmap) {
+//						double dd = h.second.first;
+//
+//						if (dd < dist) {
+//							dist = dd;
+//							p1 = h.second.second;
+//							idx = h.first;
+//						}
+//					}
+//				}
+//
+//				if (dist > abs(shift))
+//				{
+//					// punkt nale�y do przeciecia
+//					local_set.insert(i);
+//
+//					if (last_i + 1000 < i) {
+//						qInfo() << "i = " << i << " dist = " << dist;
+//						last_i = i;
+//					}
+//				}
+//			}
+//
+//		}
+//
+//		// Po zako�czeniu pracy w�tku, scal wyniki
+//		std::lock_guard<std::mutex> lock(mtx);
+//		vertices_to_remove.insert(local_set.begin(), local_set.end());
+//
+//	}
+//}
+
 void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
 {
+	qInfo() << "=== ZAMIEN PRZECIECIA NA DZIURY ===";
+	qInfo() << "Wierzch vertices:" << wierzch->vertices().size();
+	qInfo() << "Stempel faces:" << stempel->faces().size();
+	qInfo() << "Shift:" << shift << ", mv:" << mv.x << "," << mv.y << "," << mv.z;
+
 	std::mutex mtx;
 
+	qInfo() << "Budowanie KD-tree...";
 	KDNode2* tree = KDNode2::build(stempel, 5000);
+	qInfo() << "KD-tree zbudowane";
 
-	int last_i = 0;
+	UI::PROGRESSBAR::init(0, wierzch->vertices().size(), 0);
+	UI::PROGRESSBAR::setText("Finding vertices to remove...");
 
+	std::atomic<int> progress(0);
 
 #pragma omp parallel
 	{
@@ -1993,10 +2105,7 @@ void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVe
 
 #pragma omp for
 		for (int i = 0; i < wierzch->vertices().size(); i++) {
-
 			CVertex p0 = wierzch->vertices()[i];
-
-			// punkt pocz�tkowy dla wyszukiwania
 			CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
 
 			KDNode2::HitMap hmap;
@@ -2010,7 +2119,6 @@ void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVe
 				if (hmap.size() > 1) {
 					for (auto h : hmap) {
 						double dd = h.second.first;
-
 						if (dd < dist) {
 							dist = dd;
 							p1 = h.second.second;
@@ -2019,51 +2127,59 @@ void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVe
 					}
 				}
 
-				if (dist > abs(shift))
-				{
-					// punkt nale�y do przeciecia
+				if (dist > abs(shift)) {
 					local_set.insert(i);
-
-					if (last_i + 1000 < i) {
-						qInfo() << "i = " << i << " dist = " << dist;
-						last_i = i;
-					}
 				}
 			}
 
+			// Progress bar update (co 1000 wierzchołków)
+			int local_progress = ++progress;
+			if (local_progress % 1000 == 0) {
+#pragma omp critical
+				{
+					UI::PROGRESSBAR::setValue(local_progress);
+				}
+			}
 		}
 
-		// Po zako�czeniu pracy w�tku, scal wyniki
+		// Scal wyniki
 		std::lock_guard<std::mutex> lock(mtx);
 		vertices_to_remove.insert(local_set.begin(), local_set.end());
-
 	}
+
+	UI::PROGRESSBAR::hide();
+	qInfo() << "Znaleziono wierzcholkow do usuniecia:" << vertices_to_remove.size();
+	qInfo() << "=================================";
 }
 
-
-
-std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze)
+std::pair<std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze)
 {
+	qInfo() << "=== ZROB DZIURY: START ===";
+	qInfo() << "Wierzch: faces=" << wierzch->faces().size() << ", vertices=" << wierzch->vertices().size();
+	qInfo() << "Wnetrze: faces=" << wnetrze->faces().size() << ", vertices=" << wnetrze->vertices().size();
+
 	UI::PROGRESSBAR::init(0, 100, 0);
 	UI::PROGRESSBAR::setText("Making holes:");
 
 	if (wierzch && wnetrze)
 	{
+		qInfo() << "Kopiowanie wierzchu...";
 		auto wierzch_nowy = std::dynamic_pointer_cast<CMesh>(wierzch->getCopy());
 		wierzch_nowy->setParent(nullptr);
 		wierzch_nowy->removeDuplicateVertices();
 
 		UI::PROGRESSBAR::setValue(10);
 
+		qInfo() << "Kopiowanie wnetrza...";
 		auto wnetrze_nowe = std::dynamic_pointer_cast<CMesh>(wnetrze->getCopy());
 		wnetrze_nowe->setParent(nullptr);
 		wnetrze_nowe->removeDuplicateVertices();
 
 		UI::PROGRESSBAR::setValue(20);
 
-		qInfo() << "--- szukanie przeciec...";
-
+		qInfo() << "--- PRZECIECIA START ---";
 		przeciecia(wierzch_nowy, wnetrze_nowe);
+		qInfo() << "--- PRZECIECIA END ---";
 
 		UI::PROGRESSBAR::init(0, 30, 0);
 		UI::PROGRESSBAR::setText("Making holes:");
@@ -2174,6 +2290,7 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 
 		UI::PROGRESSBAR::hide();
 
+		qInfo() << "=== ZROB DZIURY: END ===";
 		return { wierzch_nowy, wnetrze_nowe };
 	}
 
