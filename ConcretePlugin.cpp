@@ -56,53 +56,38 @@ ConcretePlugin::ConcretePlugin(void)
 std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szczeka, std::shared_ptr<CMesh>  zuchwa, double dist = 3.0)
 {
 	std::set<size_t> good;
-
-	// ZAKŁADAMY ŻE JUŻ SĄ WE WSPÓLNYM UKŁADZIE WSPÓŁZĘDNYCH
-	// 
-	//auto szczeka = std::dynamic_pointer_cast<CMesh>(szczeka1->getCopy());
-	//auto zuchwa = std::dynamic_pointer_cast<CMesh>(zuchwa1->getCopy());
-
-	//auto _sM = CBaseObject::getGlobalTransformationMatrix(szczeka1);
-	//auto _zM = CBaseObject::getGlobalTransformationMatrix(zuchwa1);
-
-	//auto _sT = CTransform(_sM);
-	//auto _zT = CTransform(_zM);
-	//auto nullT = CTransform();
-
-	////transformacja szczeki do ukladu zuchwy
-	//szczeka->applyTransformation(_sT, nullT);
-	////transformacja zuchwy do ukladu zuchwy (tożsama)
-	//zuchwa->applyTransformation(_zT, nullT);
-
-	CMesh::KDtree *kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
+	CMesh::KDtree* kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
 
 	UI::STATUSBAR::setText("Looking for unwanted vertices. Please wait...");
-	UI::PROGRESSBAR::init(0, szczeka->vertices().size(), 0);
 
-	int progress = 0;
+	const int num_vertices = szczeka->vertices().size();
+	UI::PROGRESSBAR::init(0, num_vertices, 0);
 
-#pragma omp parallel for
-for (long idx = 0; idx < szczeka->vertices().size(); idx++)
-{
-    CVertex& v = szczeka->vertices()[idx];
-    
-    if (kd->is_any_in_distance_to_pt(dist,v))
-    {
-        #pragma omp critical
-        {
-            good.insert(idx);
-        }
-    }
+	std::atomic<int> progress(0);
 
-    #pragma omp atomic
-    progress++;
+	#pragma omp parallel for
+	for (long idx = 0; idx < num_vertices; idx++)
+	{
+		CVertex& v = szczeka->vertices()[idx];
 
-    #pragma omp critical
-    {
-        emit setProgressBarValue(progress);
-    }
+		if (kd->is_any_in_distance_to_pt(dist, v))
+		{
+			#pragma omp critical
+			{
+				good.insert(idx);
+			}
+		}
 
-}
+		// Progress update - thread-safe dzięki emit + critical
+		int current_progress = ++progress;
+		const int update_interval = std::max(1, num_vertices / 100);
+		if (current_progress % update_interval == 0) {
+			#pragma omp critical
+			{
+				emit setProgressBarValue(current_progress);  // ← THREAD-SAFE
+			}
+		}
+	}
 
 	zuchwa->removeKDtree();
 	UI::PROGRESSBAR::hide();
@@ -114,23 +99,27 @@ for (long idx = 0; idx < szczeka->vertices().size(); idx++)
 	std::vector<CFace>& faces = okluzja->faces();
 	std::vector<bool> toErase(faces.size(), false);
 
-	UI::PROGRESSBAR::init(0, faces.size(), 0);
+	const int num_faces = faces.size();
+	UI::PROGRESSBAR::init(0, num_faces, 0);
 	progress = 0;
 
-#pragma omp parallel for
-	for (int idx = 0; idx < faces.size(); ++idx) {
+	#pragma omp parallel for
+	for (int idx = 0; idx < num_faces; ++idx) {
 		CFace& f = faces[idx];
 
-		if ((good.find(f.A()) == good.end()) || (good.find(f.B()) == good.end()) || (good.find(f.C()) == good.end())) {
+		if ((good.find(f.A()) == good.end()) ||
+			(good.find(f.B()) == good.end()) ||
+			(good.find(f.C()) == good.end())) {
 			toErase[idx] = true;
 		}
 
-#pragma omp atomic
-		++progress;
-
-#pragma omp critical
-		{
-			emit setProgressBarValue(progress);
+		int current_progress = ++progress;
+		const int update_interval = std::max(1, num_faces / 100);
+		if (current_progress % update_interval == 0) {
+			#pragma omp critical
+			{
+				emit setProgressBarValue(current_progress);  // ← THREAD-SAFE
+			}
 		}
 	}
 
@@ -2019,132 +2008,72 @@ void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
 #include <omp.h>
 #include <mutex>
 
-//void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
-//{
-//	std::mutex mtx;
-//
-//	KDNode2* tree = KDNode2::build(stempel, 5000);
-//
-//	int last_i = 0;
-//
-//
-//#pragma omp parallel
-//	{
-//		std::set<INDEX_TYPE> local_set;
-//
-//#pragma omp for
-//		for (int i = 0; i < wierzch->vertices().size(); i++) {
-//
-//			CVertex p0 = wierzch->vertices()[i];
-//
-//			// punkt pocz�tkowy dla wyszukiwania
-//			CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
-//
-//			KDNode2::HitMap hmap;
-//			bool hit = tree->hit(stempel, p0mv, mv, hmap);
-//
-//			if (hit) {
-//				double dist = (*hmap.begin()).second.first;
-//				CPoint3d p1 = (*hmap.begin()).second.second;
-//				int idx = (*hmap.begin()).first;
-//
-//				if (hmap.size() > 1) {
-//					for (auto h : hmap) {
-//						double dd = h.second.first;
-//
-//						if (dd < dist) {
-//							dist = dd;
-//							p1 = h.second.second;
-//							idx = h.first;
-//						}
-//					}
-//				}
-//
-//				if (dist > abs(shift))
-//				{
-//					// punkt nale�y do przeciecia
-//					local_set.insert(i);
-//
-//					if (last_i + 1000 < i) {
-//						qInfo() << "i = " << i << " dist = " << dist;
-//						last_i = i;
-//					}
-//				}
-//			}
-//
-//		}
-//
-//		// Po zako�czeniu pracy w�tku, scal wyniki
-//		std::lock_guard<std::mutex> lock(mtx);
-//		vertices_to_remove.insert(local_set.begin(), local_set.end());
-//
-//	}
-//}
-
-void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
+void ConcretePlugin::zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
 {
 	qInfo() << "=== ZAMIEN PRZECIECIA NA DZIURY ===";
 	qInfo() << "Wierzch vertices:" << wierzch->vertices().size();
 	qInfo() << "Stempel faces:" << stempel->faces().size();
 	qInfo() << "Shift:" << shift << ", mv:" << mv.x << "," << mv.y << "," << mv.z;
 
-	std::mutex mtx;
-
 	qInfo() << "Budowanie KD-tree...";
 	KDNode2* tree = KDNode2::build(stempel, 5000);
 	qInfo() << "KD-tree zbudowane";
 
-	UI::PROGRESSBAR::init(0, wierzch->vertices().size(), 0);
+	const int num_vertices = wierzch->vertices().size();
+
+	// Użyj vector<bool> zamiast set - szybsze i thread-safe przy zapisie do różnych indeksów
+	std::vector<bool> to_remove(num_vertices, false);
+
+	UI::PROGRESSBAR::init(0, num_vertices, 0);
 	UI::PROGRESSBAR::setText("Finding vertices to remove...");
 
 	std::atomic<int> progress(0);
 
-#pragma omp parallel
-	{
-		std::set<INDEX_TYPE> local_set;
+	// RÓWNOLEGŁE PRZETWARZANIE - bezpieczne dzięki thread-safe KDNode2::hit()
+#pragma omp parallel for schedule(dynamic, 1000)
+	for (int i = 0; i < num_vertices; i++) {
+		CVertex p0 = wierzch->vertices()[i];
+		CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
 
-#pragma omp for
-		for (int i = 0; i < wierzch->vertices().size(); i++) {
-			CVertex p0 = wierzch->vertices()[i];
-			CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
+		KDNode2::HitMap hmap;  // LOKALNY - każdy wątek ma własny
+		bool hit = tree->hit(stempel, p0mv, mv, hmap);  // THREAD-SAFE (tylko czyta drzewo)
 
-			KDNode2::HitMap hmap;
-			bool hit = tree->hit(stempel, p0mv, mv, hmap);
+		if (hit) {
+			double dist = (*hmap.begin()).second.first;
+			CPoint3d p1 = (*hmap.begin()).second.second;
 
-			if (hit) {
-				double dist = (*hmap.begin()).second.first;
-				CPoint3d p1 = (*hmap.begin()).second.second;
-				int idx = (*hmap.begin()).first;
-
-				if (hmap.size() > 1) {
-					for (auto h : hmap) {
-						double dd = h.second.first;
-						if (dd < dist) {
-							dist = dd;
-							p1 = h.second.second;
-							idx = h.first;
-						}
+			if (hmap.size() > 1) {
+				for (auto h : hmap) {
+					double dd = h.second.first;
+					if (dd < dist) {
+						dist = dd;
+						p1 = h.second.second;
 					}
-				}
-
-				if (dist > abs(shift)) {
-					local_set.insert(i);
 				}
 			}
 
-			// Progress bar update (co 1000 wierzchołków)
-			int local_progress = ++progress;
-			if (local_progress % 1000 == 0) {
-#pragma omp critical
-				{
-					UI::PROGRESSBAR::setValue(local_progress);
-				}
+			if (dist > abs(shift)) {
+				to_remove[i] = true;  // THREAD-SAFE - każdy wątek pisze do INNEGO indeksu
 			}
 		}
 
-		// Scal wyniki
-		std::lock_guard<std::mutex> lock(mtx);
-		vertices_to_remove.insert(local_set.begin(), local_set.end());
+		// Progress bar - aktualizuj MAX 100 razy (nie co 1000 wierzchołków)
+		int current_progress = ++progress;
+		const int update_interval = std::max(1, num_vertices / 100);
+		if (current_progress % update_interval == 0) {
+#pragma omp critical
+			{
+				//UI::PROGRESSBAR::setValue(current_progress);
+				emit setProgressBarValue(current_progress);
+			}
+		}
+	}
+
+	// Konwersja vector<bool> -> set<INDEX_TYPE> (jednowątkowo, ale szybkie)
+	for (int i = 0; i < num_vertices; i++) {
+		if (to_remove[i]) {
+			vertices_to_remove.insert(i);
+		}
 	}
 
 	UI::PROGRESSBAR::hide();

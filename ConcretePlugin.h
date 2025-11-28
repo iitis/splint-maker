@@ -145,6 +145,7 @@ public:
 	 * @return Pair of meshes with holes.
 	 */
 	std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze);
+	void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove);
 
 	/**
 	 * @brief Bridges two meshes by connecting their boundaries.
