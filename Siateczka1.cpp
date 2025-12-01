@@ -720,62 +720,62 @@ bool CSiateczka1::flood( int ix, int iy, int limit, std::set<std::pair<int,int>>
 }
 
 
-void CSiateczka1::klejDziury3()
-{
-	std::shared_ptr<CMesh> rzutnia = std::dynamic_pointer_cast<CMesh>(obj->getData());
-
-	std::map< std::pair<int, int>, CVertex* >::iterator it;
-	std::set<std::pair<int, int>> dziura;
-
-	//FILE * plik = fopen("siateczka_dziury.txt", "w");
-
-	int limit = 10;
-
-	for (int iy = sMinY; iy <= sMaxY; iy++)
-	{
-		double y = (double)iy / div;
-
-		for (int ix = sMinX; ix <= sMaxX; ix++)
-		{
-			double x = (double)ix / div;
-
-			//UI::STATUSBAR::printfTimed(1000, L"Kleję dziury (v.3) [ x:%d, y:%d ]", ix, iy);
-
-			dziura.clear();
-
-			if (flood(ix, iy, limit, &dziura))
-			{
-				size_t s = dziura.size();
-				std::set<std::pair<int, int>>::iterator di;
-
-				if ((s > 0) && (s <= limit))
-				{
-					for (di = dziura.begin(); di != dziura.end(); di++)
-					{
-						it = siateczka.find(*di);
-
-						if (siateczka.end() == it)
-						{
-							siateczka[*di] = &rzutnia->vertices()[vIndex(di->first, di->second)];
-						}
-
-						if (ix > sMinX) siateczka[*di]->Z(siateczka[std::pair<int, int>(ix - 1, iy)]->Z());
-						else siateczka[*di]->Z(10);
-					}
-				}
-			}
-		}
-	}
-	//fclose(plik);
-
-	UI::updateAllViews();
-
-	rzutnia->correctNormals();
-	//UI::STATUSBAR::printf(L"Dziury zostały zaklejone.");
-
-	UI::updateAllViews();
-}
-
+//void CSiateczka1::klejDziury3()
+//{
+//	std::shared_ptr<CMesh> rzutnia = std::dynamic_pointer_cast<CMesh>(obj->getData());
+//
+//	std::map< std::pair<int, int>, CVertex* >::iterator it;
+//	std::set<std::pair<int, int>> dziura;
+//
+//	//FILE * plik = fopen("siateczka_dziury.txt", "w");
+//
+//	int limit = 10;
+//
+//	for (int iy = sMinY; iy <= sMaxY; iy++)
+//	{
+//		double y = (double)iy / div;
+//
+//		for (int ix = sMinX; ix <= sMaxX; ix++)
+//		{
+//			double x = (double)ix / div;
+//
+//			//UI::STATUSBAR::printfTimed(1000, L"Kleję dziury (v.3) [ x:%d, y:%d ]", ix, iy);
+//
+//			dziura.clear();
+//
+//			if (flood(ix, iy, limit, &dziura))
+//			{
+//				size_t s = dziura.size();
+//				std::set<std::pair<int, int>>::iterator di;
+//
+//				if ((s > 0) && (s <= limit))
+//				{
+//					for (di = dziura.begin(); di != dziura.end(); di++)
+//					{
+//						it = siateczka.find(*di);
+//
+//						if (siateczka.end() == it)
+//						{
+//							siateczka[*di] = &rzutnia->vertices()[vIndex(di->first, di->second)];
+//						}
+//
+//						if (ix > sMinX) siateczka[*di]->Z(siateczka[std::pair<int, int>(ix - 1, iy)]->Z());
+//						else siateczka[*di]->Z(10);
+//					}
+//				}
+//			}
+//		}
+//	}
+//	//fclose(plik);
+//
+//	UI::updateAllViews();
+//
+//	rzutnia->correctNormals();
+//	//UI::STATUSBAR::printf(L"Dziury zostały zaklejone.");
+//
+//	UI::updateAllViews();
+//}
+//
 
 
 void CSiateczka1::odwrocNormalne()
@@ -792,43 +792,43 @@ void CSiateczka1::odwrocNormalne()
 
 
 
-void CSiateczka1::usunNadmiaroweScianki()
-{
-	std::shared_ptr<CMesh> rzutnia = std::dynamic_pointer_cast<CMesh>(obj->getData());
-
-	double prog = pMin.Z() + 0.1;
-
-	std::vector<CFace> newFaces;
-	std::vector<CVector3f> newNormals;
-
-	qInfo() << rzutnia->faces().size();
-
-	for (int i = rzutnia->faces().size() - 1; i >= 0; i--)
-	{
-		//UI::STATUSBAR::printfTimed( 1000, L"Usuwam niepotrzebne scianki. Zostało:%d", i);
-
-		CFace f = rzutnia->faces()[i];
-
-		if ((rzutnia->vertices()[f.A()].Z() > prog) || (rzutnia->vertices()[f.B()].Z() > prog) || (rzutnia->vertices()[f.C()].Z() > prog))
-		//if ( (rzutnia->vertices()[f.A()].Z() > prog) && (rzutnia->vertices()[f.B()].Z() > prog) && (rzutnia->vertices()[f.C()].Z() > prog) )
-		{
-			newFaces.push_back(f);
-			newNormals.push_back(f.getNormal(rzutnia->vertices()));
-
-			//rzutnia->faces().erase(rzutnia->faces().begin() + i);
-			//rzutnia->fnormals().erase(rzutnia->fnormals().begin() + i);
-		}
-	}
-
-	rzutnia->faces() = std::vector<CFace>(newFaces);
-	rzutnia->fnormals() = std::vector<CVector3f>(newNormals);
-
-	rzutnia->removeUnusedVertices();
-
-	//UI::STATUSBAR::printf(L"Niepotrzebne ścianki i wierzchołki zostały usuniete.");
-
-	UI::updateAllViews();
-}
+//void CSiateczka1::usunNadmiaroweScianki()
+//{
+//	std::shared_ptr<CMesh> rzutnia = std::dynamic_pointer_cast<CMesh>(obj->getData());
+//
+//	double prog = pMin.Z() + 0.1;
+//
+//	std::vector<CFace> newFaces;
+//	std::vector<CVector3f> newNormals;
+//
+//	qInfo() << rzutnia->faces().size();
+//
+//	for (int i = rzutnia->faces().size() - 1; i >= 0; i--)
+//	{
+//		//UI::STATUSBAR::printfTimed( 1000, L"Usuwam niepotrzebne scianki. Zostało:%d", i);
+//
+//		CFace f = rzutnia->faces()[i];
+//
+//		if ((rzutnia->vertices()[f.A()].Z() > prog) || (rzutnia->vertices()[f.B()].Z() > prog) || (rzutnia->vertices()[f.C()].Z() > prog))
+//		//if ( (rzutnia->vertices()[f.A()].Z() > prog) && (rzutnia->vertices()[f.B()].Z() > prog) && (rzutnia->vertices()[f.C()].Z() > prog) )
+//		{
+//			newFaces.push_back(f);
+//			newNormals.push_back(f.getNormal(rzutnia->vertices()));
+//
+//			//rzutnia->faces().erase(rzutnia->faces().begin() + i);
+//			//rzutnia->fnormals().erase(rzutnia->fnormals().begin() + i);
+//		}
+//	}
+//
+//	rzutnia->faces() = std::vector<CFace>(newFaces);
+//	rzutnia->fnormals() = std::vector<CVector3f>(newNormals);
+//
+//	rzutnia->removeUnusedVertices();
+//
+//	//UI::STATUSBAR::printf(L"Niepotrzebne ścianki i wierzchołki zostały usuniete.");
+//
+//	UI::updateAllViews();
+//}
 
 #include <queue>
 

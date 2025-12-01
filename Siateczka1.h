@@ -44,8 +44,8 @@ public:
 
 	bool flood(int ix, int iy, int limit, std::set<std::pair<int, int>> *dziura);
 
-	void klejDziury3();
-	void usunNadmiaroweScianki();
+	//void klejDziury3();
+	//void usunNadmiaroweScianki();
 
 	void usunSkrajneScianki();
 

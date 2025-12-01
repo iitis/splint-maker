@@ -93,6 +93,7 @@ public:
 	 * @param dist Distance threshold.
 	 * @return Resulting mesh.
 	 */
+	std::shared_ptr<CMesh> liczOkluzjeORG(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist);
 	std::shared_ptr<CMesh> liczOkluzje(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist);
 
 	/**

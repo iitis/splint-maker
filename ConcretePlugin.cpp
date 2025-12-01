@@ -28,6 +28,91 @@
 #include <QDebug>
 //#include "dpLog.h"
 
+
+struct Vec3 {
+	float x, y, z;
+
+	Vec3 operator-(const Vec3& other) const {
+		return Vec3{ x - other.x, y - other.y, z - other.z };
+	}
+
+	float dot(const Vec3& other) const {
+		return x * other.x + y * other.y + z * other.z;
+	}
+
+	Vec3 cross(const Vec3& other) const {
+		return Vec3{
+			y * other.z - z * other.y,
+			z * other.x - x * other.z,
+			x * other.y - y * other.x
+		};
+	}
+
+	float norm() const {
+		return std::sqrt(dot(*this));
+	}
+};
+
+
+float distancePointToTriangle(
+	float px, float py, float pz,
+	const CVertex& v0, const CVertex& v1, const CVertex& v2)
+{
+	Vec3 p{ px, py, pz };
+	Vec3 a{ v0.x, v0.y, v0.z };
+	Vec3 b{ v1.x, v1.y, v1.z };
+	Vec3 c{ v2.x, v2.y, v2.z };
+
+	// edge vectors
+	Vec3 ab = b - a;
+	Vec3 ac = c - a;
+	Vec3 ap = p - a;
+
+	float d1 = ab.dot(ap);
+	float d2 = ac.dot(ap);
+
+	if (d1 <= 0 && d2 <= 0) return (p - a).norm(); // barycentric region outside A
+
+	Vec3 bp = p - b;
+	float d3 = ab.dot(bp);
+	float d4 = ac.dot(bp);
+	if (d3 >= 0 && d4 <= d3) return (p - b).norm(); // outside B
+
+	float vc = d1 * d4 - d3 * d2;
+	if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+		float v = d1 / (d1 - d3);
+		Vec3 proj = Vec3{ a.x + v * ab.x, a.y + v * ab.y, a.z + v * ab.z };
+		return (p - proj).norm(); // on edge AB
+	}
+
+	Vec3 cp = p - c;
+	float d5 = ab.dot(cp);
+	float d6 = ac.dot(cp);
+	if (d6 >= 0 && d5 <= d6) return (p - c).norm(); // outside C
+
+	float vb = d5 * d2 - d1 * d6;
+	if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+		float w = d2 / (d2 - d6);
+		Vec3 proj = Vec3{ a.x + w * ac.x, a.y + w * ac.y, a.z + w * ac.z };
+		return (p - proj).norm(); // on edge AC
+	}
+
+	float va = d3 * d6 - d5 * d4;
+	if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
+		float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+		Vec3 edge = Vec3{ c.x - b.x, c.y - b.y, c.z - b.z };
+		Vec3 proj = Vec3{ b.x + w * edge.x, b.y + w * edge.y, b.z + w * edge.z };
+		return (p - proj).norm(); // on edge BC
+	}
+
+	// inside face region
+	Vec3 n = ab.cross(ac);
+	n = Vec3{ n.x / n.norm(), n.y / n.norm(), n.z / n.norm() }; // unit normal
+	float dist = std::abs((p - a).dot(n));
+	return dist;
+}
+
+
 ConcretePlugin::ConcretePlugin(void)
 {
 	m_picking = false;
@@ -52,8 +137,9 @@ ConcretePlugin::ConcretePlugin(void)
 }
 
 
+#include "KDNode2.h"
 
-std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szczeka, std::shared_ptr<CMesh>  zuchwa, double dist = 3.0)
+std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzjeORG(std::shared_ptr<CMesh>  szczeka, std::shared_ptr<CMesh>  zuchwa, double dist = 3.0)
 {
 	std::set<size_t> good;
 	CMesh::KDtree* kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
@@ -140,6 +226,310 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 	return okluzja;
 }
 
+// Dodaj funkcję pomocniczą do znajdowania najbliższego punktu na trójkącie
+CPoint3d closestPointOnTriangle(const CPoint3d& p, const CVertex& v0, const CVertex& v1, const CVertex& v2)
+{
+	Vec3 point{ p.x, p.y, p.z };
+	Vec3 a{ v0.x, v0.y, v0.z };
+	Vec3 b{ v1.x, v1.y, v1.z };
+	Vec3 c{ v2.x, v2.y, v2.z };
+
+	Vec3 ab = b - a;
+	Vec3 ac = c - a;
+	Vec3 ap = point - a;
+
+	float d1 = ab.dot(ap);
+	float d2 = ac.dot(ap);
+	if (d1 <= 0.0f && d2 <= 0.0f) return CPoint3d(a.x, a.y, a.z); // Vertex region A
+
+	Vec3 bp = point - b;
+	float d3 = ab.dot(bp);
+	float d4 = ac.dot(bp);
+	if (d3 >= 0.0f && d4 <= d3) return CPoint3d(b.x, b.y, b.z); // Vertex region B
+
+	float vc = d1 * d4 - d3 * d2;
+	if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
+		float v = d1 / (d1 - d3);
+		Vec3 result = Vec3{ a.x + v * ab.x, a.y + v * ab.y, a.z + v * ab.z };
+		return CPoint3d(result.x, result.y, result.z); // Edge AB
+	}
+
+	Vec3 cp = point - c;
+	float d5 = ab.dot(cp);
+	float d6 = ac.dot(cp);
+	if (d6 >= 0.0f && d5 <= d6) return CPoint3d(c.x, c.y, c.z); // Vertex region C
+
+	float vb = d5 * d2 - d1 * d6;
+	if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
+		float w = d2 / (d2 - d6);
+		Vec3 result = Vec3{ a.x + w * ac.x, a.y + w * ac.y, a.z + w * ac.z };
+		return CPoint3d(result.x, result.y, result.z); // Edge AC
+	}
+
+	float va = d3 * d6 - d5 * d4;
+	if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
+		float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+		Vec3 bc = c - b;
+		Vec3 result = Vec3{ b.x + w * bc.x, b.y + w * bc.y, b.z + w * bc.z };
+		return CPoint3d(result.x, result.y, result.z); // Edge BC
+	}
+
+	// Point inside triangle - project onto plane
+	float denom = 1.0f / (va + vb + vc);
+	float v = vb * denom;
+	float w = vc * denom;
+	Vec3 result = Vec3{
+		a.x + ab.x * v + ac.x * w,
+		a.y + ab.y * v + ac.y * w,
+		a.z + ab.z * v + ac.z * w
+	};
+	return CPoint3d(result.x, result.y, result.z);
+}
+
+
+
+std::shared_ptr<CMesh> ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist = 3.0)
+{
+	UI::STATUSBAR::setText("Building KD-tree for triangles...");
+	KDNode2* tree = KDNode2::build(zuchwa.get(), 256);
+
+	// ========== ETAP 1: Klasyfikacja wierzchołków ==========
+	UI::STATUSBAR::setText("Stage 1: Classifying vertices...");
+
+	const int num_vertices = szczeka->vertices().size();
+	UI::PROGRESSBAR::init(0, num_vertices, 0);
+	std::atomic<int> progress(0);
+
+	std::vector<double> vertex_distances(num_vertices, std::numeric_limits<double>::max());
+	std::vector<CPoint3d> vertex_closest_points(num_vertices);
+
+#pragma omp parallel for
+	for (long idx = 0; idx < num_vertices; idx++)
+	{
+		CVertex& v = szczeka->vertices()[idx];
+
+		CBoundingBox vertex_bb(
+			CPoint3d(v.x - dist * 2, v.y - dist * 2, v.z - dist * 2),
+			CPoint3d(v.x + dist * 2, v.y + dist * 2, v.z + dist * 2)
+		);
+
+		std::set<INDEX_TYPE> crossed_triangles;
+		if (tree->findCrossedBB(vertex_bb, zuchwa.get(), crossed_triangles) && !crossed_triangles.empty()) {
+			double min_dist = std::numeric_limits<double>::max();
+			CPoint3d closest_point = v;
+
+			for (INDEX_TYPE tri_idx : crossed_triangles) {
+				const CFace& face = zuchwa->faces()[tri_idx];
+				const CVertex& v0 = zuchwa->vertices()[face.A()];
+				const CVertex& v1 = zuchwa->vertices()[face.B()];
+				const CVertex& v2 = zuchwa->vertices()[face.C()];
+
+				CPoint3d proj = closestPointOnTriangle(v, v0, v1, v2);
+				double tri_dist = CVector3d(v, proj).length();
+
+				if (tri_dist < min_dist) {
+					min_dist = tri_dist;
+					closest_point = proj;
+				}
+			}
+
+			vertex_distances[idx] = min_dist;
+			vertex_closest_points[idx] = closest_point;
+		}
+
+		int current_progress = ++progress;
+		if (current_progress % std::max(1, num_vertices / 100) == 0) {
+#pragma omp critical
+			{ emit setProgressBarValue(current_progress); }
+		}
+	}
+
+	delete tree;
+	UI::PROGRESSBAR::hide();
+
+	std::shared_ptr<CMesh> okluzja = std::dynamic_pointer_cast<CMesh>(szczeka->getCopy());
+
+	// ========== ETAP 1A: Usuwanie ścianek gdzie WSZYSTKIE wierzchołki są za daleko ==========
+	UI::STATUSBAR::setText("Stage 1a: Removing distant faces...");
+
+	std::vector<CFace>& faces = okluzja->faces();
+	std::vector<bool> toErase(faces.size(), false);
+
+	const int num_faces = faces.size();
+	UI::PROGRESSBAR::init(0, num_faces, 0);
+	progress = 0;
+
+#pragma omp parallel for
+	for (int idx = 0; idx < num_faces; ++idx) {
+		CFace& f = faces[idx];
+
+		// Usuń ściankę TYLKO jeśli WSZYSTKIE 3 wierzchołki są za daleko
+		if (vertex_distances[f.A()] > dist &&
+			vertex_distances[f.B()] > dist &&
+			vertex_distances[f.C()] > dist) {
+			toErase[idx] = true;
+		}
+
+		int current_progress = ++progress;
+		if (current_progress % std::max(1, num_faces / 100) == 0) {
+#pragma omp critical
+			{ emit setProgressBarValue(current_progress); }
+		}
+	}
+
+	size_t idx = 0;
+	auto it = std::remove_if(faces.begin(), faces.end(),
+		[&toErase, &idx](const CFace&) {
+			return toErase[idx++];
+		});
+	faces.erase(it, faces.end());
+
+	UI::PROGRESSBAR::hide();
+
+	// ========== ETAP 2: Przesuwanie wystających wierzchołków ==========
+	UI::STATUSBAR::setText("Stage 2: Adjusting protruding vertices...");
+
+	// Zlicz ile ścianek używa każdego wierzchołka
+	std::vector<int> vertex_face_count(num_vertices, 0);
+	std::vector<std::vector<size_t>> vertex_to_faces(num_vertices); // Która ścianka używa danego wierzchołka
+
+	for (size_t face_idx = 0; face_idx < faces.size(); face_idx++) {
+		const CFace& f = faces[face_idx];
+		vertex_face_count[f.A()]++;
+		vertex_face_count[f.B()]++;
+		vertex_face_count[f.C()]++;
+
+		vertex_to_faces[f.A()].push_back(face_idx);
+		vertex_to_faces[f.B()].push_back(face_idx);
+		vertex_to_faces[f.C()].push_back(face_idx);
+	}
+
+	UI::PROGRESSBAR::init(0, num_vertices, 0);
+	progress = 0;
+
+	std::map<size_t, CPoint3d> vertices_to_move;
+
+	for (size_t i = 0; i < num_vertices; i++) {
+		if (vertex_face_count[i] == 0) continue; // Wierzchołek nieużywany
+
+		if (vertex_distances[i] > dist && vertex_distances[i] < dist * 1.5) {
+			CVertex& v = okluzja->vertices()[i];
+			CVector3d direction = CVector3d(v, vertex_closest_points[i]).getNormalized();
+			double move_distance = vertex_distances[i] - dist * 0.95;
+
+			if (vertex_face_count[i] <= 2) {
+				// ===== WIERZCHOŁEK NA BRZEGU =====
+				// Znajdź płaszczyznę przeciętną ścianek, do których należy wierzchołek
+				if (!vertex_to_faces[i].empty()) {
+					// Zbierz normalne wszystkich ścianek zawierających ten wierzchołek
+					CVector3d avg_normal(0, 0, 0);
+
+					for (size_t face_idx : vertex_to_faces[i]) {
+						const CFace& f = faces[face_idx];
+						const CVertex& v0 = okluzja->vertices()[f.A()];
+						const CVertex& v1 = okluzja->vertices()[f.B()];
+						const CVertex& v2 = okluzja->vertices()[f.C()];
+
+						CVector3d edge1 = CVector3d(v0, v1);
+						CVector3d edge2 = CVector3d(v0, v2);
+						CVector3d face_normal = edge1.crossProduct(edge2).getNormalized();
+
+						avg_normal += face_normal;
+					}
+
+					avg_normal = avg_normal.getNormalized();
+
+					// Projekcja kierunku ruchu na płaszczyznę przeciętną ścianek
+					// (usuwamy składową normalną do powierzchni)
+					double normal_component = direction.dotProduct(avg_normal);
+					CVector3d tangent_direction = direction - (avg_normal * normal_component);
+
+					if (tangent_direction.length() > 0.01) {
+						tangent_direction = tangent_direction.getNormalized();
+						CPoint3d new_pos = v + tangent_direction * move_distance;
+						vertices_to_move[i] = new_pos;
+					}
+					else {
+						// Jeśli kierunek ruchu jest prostopadły do powierzchni, nie przesuwaj
+						// (lub przesuń minimalnie wzdłuż krawędzi)
+					}
+				}
+			}
+			else {
+				// ===== WIERZCHOŁEK WEWNĘTRZNY =====
+				// Dla wierzchołków wewnętrznych też stosujemy projekcję na powierzchnię lokalną
+				if (!vertex_to_faces[i].empty()) {
+					CVector3d avg_normal(0, 0, 0);
+
+					for (size_t face_idx : vertex_to_faces[i]) {
+						const CFace& f = faces[face_idx];
+						const CVertex& v0 = okluzja->vertices()[f.A()];
+						const CVertex& v1 = okluzja->vertices()[f.B()];
+						const CVertex& v2 = okluzja->vertices()[f.C()];
+
+						CVector3d edge1 = CVector3d(v0, v1);
+						CVector3d edge2 = CVector3d(v0, v2);
+						CVector3d face_normal = edge1.crossProduct(edge2).getNormalized();
+
+						avg_normal += face_normal;
+					}
+
+					avg_normal = avg_normal.getNormalized();
+
+					// Projekcja kierunku ruchu na płaszczyznę lokalną
+					double normal_component = direction.dotProduct(avg_normal);
+					CVector3d tangent_direction = direction - (avg_normal * normal_component);
+
+					if (tangent_direction.length() > 0.01) {
+						tangent_direction = tangent_direction.getNormalized();
+						CPoint3d new_pos = v + tangent_direction * move_distance;
+						vertices_to_move[i] = new_pos;
+					}
+				}
+			}
+		}
+
+		if (i % std::max(1, num_vertices / 100) == 0) {
+			emit setProgressBarValue(i);
+		}
+	}
+
+	// Zastosuj przesunięcia
+	for (const auto& [vertex_idx, new_pos] : vertices_to_move) {
+		okluzja->vertices()[vertex_idx] = new_pos;
+	}
+
+	/* // Opcjonalnie: Laplacian smoothing na przesuniętych wierzchołkach
+	for (int iter = 0; iter < 3; iter++) { // 3 iteracje wygładzania
+		for (size_t i = 0; i < num_vertices; i++) {
+			if (vertex_face_count[i] <= 2 && vertex_face_count[i] > 0) {
+				// Uśrednij pozycję z sąsiadami
+				CPoint3d avg_pos(0, 0, 0);
+				int neighbor_count = 0;
+
+				for (size_t face_idx : vertex_to_faces[i]) {
+					const CFace& f = faces[face_idx];
+					if (f.A() != i) { avg_pos += okluzja->vertices()[f.A()]; neighbor_count++; }
+					if (f.B() != i) { avg_pos += okluzja->vertices()[f.B()]; neighbor_count++; }
+					if (f.C() != i) { avg_pos += okluzja->vertices()[f.C()]; neighbor_count++; }
+				}
+
+				if (neighbor_count > 0) {
+					avg_pos *= (1.0 / neighbor_count);
+					okluzja->vertices()[i] = okluzja->vertices()[i] * 0.7 + avg_pos * 0.3; // 30% wygładzania
+				}
+			}
+		}
+	}
+	// koniec Laplacian smoothing */
+
+	okluzja->removeUnusedVertices();
+
+	UI::PROGRESSBAR::hide();
+	UI::STATUSBAR::setText("Ready!");
+
+	return okluzja;
+}
 
 
 std::shared_ptr<CMesh> meshWithKeyword(QString keyword, CObject::Children kids)
@@ -700,6 +1090,417 @@ void ConcretePlugin::etap11()
 }
 
 
+//
+//// Funkcja oblicza aspect ratio trójkąta (stosunek najdłuższej krawędzi do wysokości)
+//float calculateAspectRatio(const CVertex& v0, const CVertex& v1, const CVertex& v2) {
+//	CVector3d e0 = CVector3d(v0, v1);
+//	CVector3d e1 = CVector3d(v1, v2);
+//	CVector3d e2 = CVector3d(v2, v0);
+//
+//	float len0 = e0.length();
+//	float len1 = e1.length();
+//	float len2 = e2.length();
+//
+//	float longest = std::max({ len0, len1, len2 });
+//	float perimeter = len0 + len1 + len2;
+//
+//	// Pole trójkąta za pomocą wzoru Herona
+//	float s = perimeter / 2.0f;
+//	float area = std::sqrt(s * (s - len0) * (s - len1) * (s - len2));
+//
+//	if (area < 1e-6f) return 1000.0f; // Zdegenerowany trójkąt
+//
+//	// Wysokość z najdłuższej krawędzi
+//	float height = 2.0f * area / longest;
+//
+//	return longest / height; // Aspect ratio
+//}
+//
+//// Funkcja dzieli wąskie trójkąty na mniejsze przez podział najdłuższej krawędzi
+//void subdivideNarrowFaces(std::shared_ptr<CMesh> mesh, float aspectRatioThreshold = 5.0f, int maxIterations = 3) {
+//	if (!mesh) return;
+//
+//	UI::STATUSBAR::setText("Subdividing narrow faces...");
+//	qInfo() << "=== SUBDIVIDE NARROW FACES: START ===";
+//	qInfo() << "Initial faces:" << mesh->faces().size() << ", vertices:" << mesh->vertices().size();
+//	qInfo() << "Aspect ratio threshold:" << aspectRatioThreshold;
+//
+//	for (int iteration = 0; iteration < maxIterations; iteration++) {
+//		qInfo() << "Iteration" << (iteration + 1) << "/" << maxIterations;
+//
+//		std::vector<CFace>& faces = mesh->faces();
+//		std::vector<CVertex>& vertices = mesh->vertices();
+//
+//		// Mapa: krawędź -> nowy wierzchołek (aby uniknąć duplikacji)
+//		std::map<std::pair<INDEX_TYPE, INDEX_TYPE>, INDEX_TYPE> edgeMidpoints;
+//
+//		std::vector<CFace> newFaces;
+//		newFaces.reserve(faces.size() * 2); // Rezerwujemy miejsce
+//
+//		int subdivided = 0;
+//
+//		for (size_t i = 0; i < faces.size(); i++) {
+//			const CFace& f = faces[i];
+//			const CVertex& v0 = vertices[f.A()];
+//			const CVertex& v1 = vertices[f.B()];
+//			const CVertex& v2 = vertices[f.C()];
+//
+//			float aspectRatio = calculateAspectRatio(v0, v1, v2);
+//
+//			if (aspectRatio > aspectRatioThreshold) {
+//				subdivided++;
+//
+//				// Znajdź najdłuższą krawędź
+//				CVector3d e0 = CVector3d(v0, v1);
+//				CVector3d e1 = CVector3d(v1, v2);
+//				CVector3d e2 = CVector3d(v2, v0);
+//
+//				float len0 = e0.length();
+//				float len1 = e1.length();
+//				float len2 = e2.length();
+//
+//				INDEX_TYPE A = f.A(), B = f.B(), C = f.C();
+//				INDEX_TYPE midIdx;
+//
+//				if (len0 >= len1 && len0 >= len2) {
+//					// Podziel krawędź A-B
+//					auto edge = std::minmax(A, B);
+//					auto it = edgeMidpoints.find(edge);
+//
+//					if (it != edgeMidpoints.end()) {
+//						midIdx = it->second;
+//					}
+//					else {
+//						CVertex mid;
+//						mid.x = (v0.x + v1.x) / 2.0f;
+//						mid.y = (v0.y + v1.y) / 2.0f;
+//						mid.z = (v0.z + v1.z) / 2.0f;
+//
+//						midIdx = vertices.size();
+//						vertices.push_back(mid);
+//						edgeMidpoints[edge] = midIdx;
+//					}
+//
+//					// Utwórz dwa nowe trójkąty: (A, mid, C) i (mid, B, C)
+//					newFaces.emplace_back(A, midIdx, C);
+//					newFaces.emplace_back(midIdx, B, C);
+//
+//				}
+//				else if (len1 >= len0 && len1 >= len2) {
+//					// Podziel krawędź B-C
+//					auto edge = std::minmax(B, C);
+//					auto it = edgeMidpoints.find(edge);
+//
+//					if (it != edgeMidpoints.end()) {
+//						midIdx = it->second;
+//					}
+//					else {
+//						CVertex mid;
+//						mid.x = (v1.x + v2.x) / 2.0f;
+//						mid.y = (v1.y + v2.y) / 2.0f;
+//						mid.z = (v1.z + v2.z) / 2.0f;
+//
+//						midIdx = vertices.size();
+//						vertices.push_back(mid);
+//						edgeMidpoints[edge] = midIdx;
+//					}
+//
+//					newFaces.emplace_back(B, midIdx, A);
+//					newFaces.emplace_back(midIdx, C, A);
+//
+//				}
+//				else {
+//					// Podziel krawędź C-A
+//					auto edge = std::minmax(C, A);
+//					auto it = edgeMidpoints.find(edge);
+//
+//					if (it != edgeMidpoints.end()) {
+//						midIdx = it->second;
+//					}
+//					else {
+//						CVertex mid;
+//						mid.x = (v2.x + v0.x) / 2.0f;
+//						mid.y = (v2.y + v0.y) / 2.0f;
+//						mid.z = (v2.z + v0.z) / 2.0f;
+//
+//						midIdx = vertices.size();
+//						vertices.push_back(mid);
+//						edgeMidpoints[edge] = midIdx;
+//					}
+//
+//					newFaces.emplace_back(C, midIdx, B);
+//					newFaces.emplace_back(midIdx, A, B);
+//				}
+//			}
+//			else {
+//				// Zachowaj oryginalny trójkąt
+//				newFaces.push_back(f);
+//			}
+//		}
+//
+//		qInfo() << "Subdivided" << subdivided << "faces";
+//		qInfo() << "New faces:" << newFaces.size() << ", vertices:" << vertices.size();
+//
+//		faces = std::move(newFaces);
+//
+//		if (subdivided == 0) {
+//			qInfo() << "No more narrow faces found, stopping early";
+//			break;
+//		}
+//	}
+//
+//	mesh->removeDuplicateVertices();
+//
+//	qInfo() << "Final faces:" << mesh->faces().size() << ", vertices:" << mesh->vertices().size();
+//	qInfo() << "=== SUBDIVIDE NARROW FACES: END ===";
+//	UI::STATUSBAR::setText("Subdivision complete");
+//}
+
+// Funkcja oblicza aspect ratio trójkąta (stosunek najdłuższej krawędzi do wysokości)
+float calculateAspectRatio(const CVertex& v0, const CVertex& v1, const CVertex& v2) {
+	CVector3d e0 = CVector3d(v0, v1);
+	CVector3d e1 = CVector3d(v1, v2);
+	CVector3d e2 = CVector3d(v2, v0);
+
+	float len0 = e0.length();
+	float len1 = e1.length();
+	float len2 = e2.length();
+
+	float longest = std::max({ len0, len1, len2 });
+	float perimeter = len0 + len1 + len2;
+
+	// Pole trójkąta za pomocą wzoru Herona
+	float s = perimeter / 2.0f;
+	float area = std::sqrt(s * (s - len0) * (s - len1) * (s - len2));
+
+	if (area < 1e-6f) return 1000.0f; // Zdegenerowany trójkąt
+
+	// Wysokość z najdłuższej krawędzi
+	float height = 2.0f * area / longest;
+
+	return longest / height; // Aspect ratio
+}
+
+// KLUCZOWA FUNKCJA: Hash dla krawędzi (aby środkowe wierzchołki były wspólne)
+struct EdgeHasher {
+	std::size_t operator()(const std::pair<INDEX_TYPE, INDEX_TYPE>& edge) const {
+		// Zawsze sortuj, aby (A,B) i (B,A) dawały ten sam hash
+		INDEX_TYPE a = std::min(edge.first, edge.second);
+		INDEX_TYPE b = std::max(edge.first, edge.second);
+		return std::hash<INDEX_TYPE>()(a) ^ (std::hash<INDEX_TYPE>()(b) << 1);
+	}
+};
+
+
+
+
+
+#include <unordered_set>
+
+
+void subdivideNarrowFaces(std::shared_ptr<CMesh> mesh,
+	float aspectRatioThreshold = 5.0f,
+	int maxIterations = 3)
+{
+	if (!mesh) return;
+
+	using Edge = std::pair<INDEX_TYPE, INDEX_TYPE>;
+
+	UI::STATUSBAR::setText("Subdividing narrow faces...");
+	qInfo() << "=== SUBDIVIDE NARROW FACES: START ===";
+	qInfo() << "Initial faces:" << mesh->faces().size()
+		<< ", vertices:" << mesh->vertices().size();
+	qInfo() << "Aspect ratio threshold:" << aspectRatioThreshold;
+
+	for (int iteration = 0; iteration < maxIterations; ++iteration) {
+		qInfo() << "Iteration" << (iteration + 1) << "/" << maxIterations;
+
+		std::vector<CFace>& faces = mesh->faces();
+		std::vector<CVertex>& verts = mesh->vertices();
+
+		const size_t faceCount = faces.size();
+		if (faceCount == 0) break;
+
+		// 1) Wyznaczamy zbiór krawędzi do podziału (edge-based)
+		std::unordered_set<Edge, EdgeHasher> edgesToSplit;
+		edgesToSplit.reserve(faceCount * 2);
+
+		for (INDEX_TYPE i = 0; i < static_cast<INDEX_TYPE>(faceCount); ++i) {
+			const CFace& f = faces[i];
+			const CVertex& v0 = verts[f.A()];
+			const CVertex& v1 = verts[f.B()];
+			const CVertex& v2 = verts[f.C()];
+
+			float aspect = calculateAspectRatio(v0, v1, v2);
+			if (aspect <= aspectRatioThreshold)
+				continue;
+
+			CVector3d e0(v0, v1), e1(v1, v2), e2(v2, v0);
+			float len0 = e0.length();
+			float len1 = e1.length();
+			float len2 = e2.length();
+
+			Edge eAB = std::minmax(f.A(), f.B());
+			Edge eBC = std::minmax(f.B(), f.C());
+			Edge eCA = std::minmax(f.C(), f.A());
+
+			// Sortuj krawędzie wg długości (malejąco)
+			std::vector<std::pair<float, Edge>> sortedEdges = {
+				{len0, eAB}, {len1, eBC}, {len2, eCA}
+			};
+			std::sort(sortedEdges.begin(), sortedEdges.end(),
+				[](const auto& a, const auto& b) {
+					return a.first > b.first;
+				});
+
+			float longest = sortedEdges[0].first;
+			float secondLongest = sortedEdges[1].first;
+			float shortest = sortedEdges[2].first;
+
+			// Jeśli 2 długie krawędzie (różnica > 50%), oznacz obie
+			if (secondLongest > shortest * 1.5f) {
+				edgesToSplit.insert(sortedEdges[0].second);
+				edgesToSplit.insert(sortedEdges[1].second);
+			}
+			else {
+				edgesToSplit.insert(sortedEdges[0].second);
+			}
+		}
+
+		if (edgesToSplit.empty()) {
+			qInfo() << "No narrow faces above threshold, stopping early.";
+			break;
+		}
+
+		qInfo() << "Edges to split:" << edgesToSplit.size();
+
+		// 2) Właściwa subdivizja
+		std::unordered_map<Edge, INDEX_TYPE, EdgeHasher> edgeMidpoints;
+		edgeMidpoints.reserve(edgesToSplit.size());
+
+		std::vector<CFace> newFaces;
+		newFaces.reserve(faceCount * 2);
+
+		auto getMidpoint = [&](const Edge& e, INDEX_TYPE i0, INDEX_TYPE i1) -> INDEX_TYPE {
+			auto it = edgeMidpoints.find(e);
+			if (it != edgeMidpoints.end())
+				return it->second;
+
+			const CVertex& a = verts[i0];
+			const CVertex& b = verts[i1];
+
+			CVertex mid;
+			mid.x = (a.x + b.x) * 0.5f;
+			mid.y = (a.y + b.y) * 0.5f;
+			mid.z = (a.z + b.z) * 0.5f;
+
+			INDEX_TYPE midIdx = static_cast<INDEX_TYPE>(verts.size());
+			verts.push_back(mid);
+			edgeMidpoints[e] = midIdx;
+			return midIdx;
+			};
+
+		int subdivided = 0;
+		int count1 = 0, count2 = 0, count3 = 0; // Statystyki
+
+		for (INDEX_TYPE i = 0; i < static_cast<INDEX_TYPE>(faceCount); ++i) {
+			const CFace& f = faces[i];
+
+			INDEX_TYPE A = f.A();
+			INDEX_TYPE B = f.B();
+			INDEX_TYPE C = f.C();
+
+			Edge eAB = std::minmax(A, B);
+			Edge eBC = std::minmax(B, C);
+			Edge eCA = std::minmax(C, A);
+
+			bool splitAB = edgesToSplit.count(eAB) > 0;
+			bool splitBC = edgesToSplit.count(eBC) > 0;
+			bool splitCA = edgesToSplit.count(eCA) > 0;
+
+			int splitCount = (splitAB ? 1 : 0) + (splitBC ? 1 : 0) + (splitCA ? 1 : 0);
+
+			if (splitCount == 0) {
+				newFaces.push_back(f);
+				continue;
+			}
+
+			subdivided++;
+
+			if (splitCount == 1) {
+				count1++;
+				if (splitAB) {
+					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+					newFaces.emplace_back(A, mAB, C);
+					newFaces.emplace_back(mAB, B, C);
+				}
+				else if (splitBC) {
+					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+					newFaces.emplace_back(B, mBC, A);
+					newFaces.emplace_back(mBC, C, A);
+				}
+				else {
+					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+					newFaces.emplace_back(C, mCA, B);
+					newFaces.emplace_back(mCA, A, B);
+				}
+
+			}
+			else if (splitCount == 2) {
+				count2++;
+				if (splitAB && splitBC) {
+					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+					newFaces.emplace_back(A, mAB, C);
+					newFaces.emplace_back(mAB, mBC, C);
+					newFaces.emplace_back(mAB, B, mBC);
+
+				}
+				else if (splitBC && splitCA) {
+					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+					newFaces.emplace_back(B, mBC, A);
+					newFaces.emplace_back(mBC, mCA, A);
+					newFaces.emplace_back(mBC, C, mCA);
+
+				}
+				else {
+					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+					newFaces.emplace_back(C, mCA, B);
+					newFaces.emplace_back(mCA, mAB, B);
+					newFaces.emplace_back(mCA, A, mAB);
+				}
+
+			}
+			else {
+				count3++;
+				INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+				INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+				INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+
+				newFaces.emplace_back(A, mAB, mCA);
+				newFaces.emplace_back(B, mBC, mAB);
+				newFaces.emplace_back(C, mCA, mBC);
+				newFaces.emplace_back(mAB, mBC, mCA);
+			}
+		}
+
+		qInfo() << "Subdivided:" << subdivided
+			<< " (1-edge:" << count1 << ", 2-edge:" << count2 << ", 3-edge:" << count3 << ")"
+			<< ", New faces:" << newFaces.size()
+			<< ", Vertices:" << verts.size();
+
+		faces = std::move(newFaces);
+
+		if (subdivided == 0) break;
+	}
+
+	qInfo() << "Final faces:" << mesh->faces().size()
+		<< ", vertices:" << mesh->vertices().size();
+	qInfo() << "=== SUBDIVIDE NARROW FACES: END ===";
+	UI::STATUSBAR::setText("Subdivision complete");
+}
 
 
 
@@ -743,6 +1544,14 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 	// (wierzch już ma usunięte skrajne ścianki dzięki usunSkrajneScianki())
 	qInfo() << "Selektywne usuwanie zerowych scianek z wnetrza...";
 	symulator->usunNiepasujaceZeroweSciankiWnetrza();
+
+
+	// ========== SUBDIVIDE NARROW FACES - WNETRZE ==========
+	//subdivideNarrowFaces(mesh_wnetrze, 5.0f, 2);
+
+	// ========== SUBDIVIDE NARROW FACES - WIERZCH ==========
+	//subdivideNarrowFaces(mesh_wierzch, 5.0f, 10);
+
 
 	etap14_nowy();
 
@@ -894,6 +1703,8 @@ void ConcretePlugin::wytlaczanie()
 	//return;
 
 
+	//subdivideNarrowFaces(mesh_wierzch, 5.0f, 10);
+
 	auto [wi2, wn2] = zrobDziury(wi, wn);
 
 
@@ -904,6 +1715,7 @@ void ConcretePlugin::wytlaczanie()
 		UI::STATUSBAR::setText("Filling holes in the surface");
 
 		if (auto filled = filling(bridged)) {
+			subdivideNarrowFaces(filled, 5.0f, 4);
 			filled->setLabel("szyna");
 			CWorkspace::instance()->_objectAdd(filled);
 			filled->getParentPtr()->setLabel("szyna");
@@ -1605,88 +2417,6 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 
 
 
-struct Vec3 {
-	float x, y, z;
-
-	Vec3 operator-(const Vec3& other) const {
-		return Vec3{ x - other.x, y - other.y, z - other.z };
-	}
-
-	float dot(const Vec3& other) const {
-		return x * other.x + y * other.y + z * other.z;
-	}
-
-	Vec3 cross(const Vec3& other) const {
-		return Vec3{
-			y * other.z - z * other.y,
-			z * other.x - x * other.z,
-			x * other.y - y * other.x
-		};
-	}
-
-	float norm() const {
-		return std::sqrt(dot(*this));
-	}
-};
-
-
-float distancePointToTriangle(
-	float px, float py, float pz,
-	const CVertex& v0, const CVertex& v1, const CVertex& v2)
-{
-	Vec3 p{ px, py, pz };
-	Vec3 a{ v0.x, v0.y, v0.z };
-	Vec3 b{ v1.x, v1.y, v1.z };
-	Vec3 c{ v2.x, v2.y, v2.z };
-
-	// edge vectors
-	Vec3 ab = b - a;
-	Vec3 ac = c - a;
-	Vec3 ap = p - a;
-
-	float d1 = ab.dot(ap);
-	float d2 = ac.dot(ap);
-
-	if (d1 <= 0 && d2 <= 0) return (p - a).norm(); // barycentric region outside A
-
-	Vec3 bp = p - b;
-	float d3 = ab.dot(bp);
-	float d4 = ac.dot(bp);
-	if (d3 >= 0 && d4 <= d3) return (p - b).norm(); // outside B
-
-	float vc = d1 * d4 - d3 * d2;
-	if (vc <= 0 && d1 >= 0 && d3 <= 0) {
-		float v = d1 / (d1 - d3);
-		Vec3 proj = Vec3{ a.x + v * ab.x, a.y + v * ab.y, a.z + v * ab.z };
-		return (p - proj).norm(); // on edge AB
-	}
-
-	Vec3 cp = p - c;
-	float d5 = ab.dot(cp);
-	float d6 = ac.dot(cp);
-	if (d6 >= 0 && d5 <= d6) return (p - c).norm(); // outside C
-
-	float vb = d5 * d2 - d1 * d6;
-	if (vb <= 0 && d2 >= 0 && d6 <= 0) {
-		float w = d2 / (d2 - d6);
-		Vec3 proj = Vec3{ a.x + w * ac.x, a.y + w * ac.y, a.z + w * ac.z };
-		return (p - proj).norm(); // on edge AC
-	}
-
-	float va = d3 * d6 - d5 * d4;
-	if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
-		float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-		Vec3 edge = Vec3{ c.x - b.x, c.y - b.y, c.z - b.z };
-		Vec3 proj = Vec3{ b.x + w * edge.x, b.y + w * edge.y, b.z + w * edge.z };
-		return (p - proj).norm(); // on edge BC
-	}
-
-	// inside face region
-	Vec3 n = ab.cross(ac);
-	n = Vec3{ n.x / n.norm(), n.y / n.norm(), n.z / n.norm() }; // unit normal
-	float dist = std::abs((p - a).dot(n));
-	return dist;
-}
 
 
 
@@ -2404,97 +3134,208 @@ std::shared_ptr<CMesh> scalSiatki(std::vector<std::shared_ptr<CMesh>> siatki)
 }
 
 
-std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze) {
+//std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze) {
+//
+//	UI::PROGRESSBAR::init(0, 100, 0);
+//	UI::PROGRESSBAR::setText("Bridging:");
+//
+//	if (wierzch && wnetrze)
+//	{
+//		wierzch->removeDuplicateVertices();
+//		wnetrze->removeDuplicateVertices();
+//
+//		UI::PROGRESSBAR::setValue(10);
+//
+//		std::pair< std::vector<CVertex>, std::vector<CFace> > result;
+//
+//		std::vector<CEdge> sz_ed;
+//		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> sz_bGraph;
+//
+//		findBoundaryEdgesWithDirection(wierzch->faces(), sz_ed, sz_bGraph);
+//
+//		UI::PROGRESSBAR::setValue(30);
+//
+//		std::vector<std::vector<INDEX_TYPE>> sz_loops = findBoundaryLoops(sz_bGraph);
+//
+//		UI::PROGRESSBAR::setValue(50);
+//
+//		auto sz_ae = std::make_shared<CAnnotationEdges>();
+//
+//		std::vector<INDEX_TYPE> IS_V;
+//
+//		for (auto e : sz_ed) {
+//			IS_V.push_back(e.first);
+//			sz_ae->addEdge(wierzch->vertices()[e.first], wierzch->vertices()[e.second]);
+//		}
+//
+//
+//		std::vector<CEdge> ok_ed;
+//		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> ok_bGraph;
+//
+//		UI::PROGRESSBAR::setValue(55);
+//
+//		findBoundaryEdgesWithDirection(wnetrze->faces(), ok_ed, ok_bGraph);
+//		std::vector<std::vector<INDEX_TYPE>> ok_loops = findBoundaryLoops(ok_bGraph);
+//
+//		UI::PROGRESSBAR::setValue(65);
+//
+//		auto ok_ae = std::make_shared<CAnnotationEdges>();
+//
+//		std::vector<INDEX_TYPE> IS_VZ;
+//
+//		for (auto e : ok_ed) {
+//			IS_VZ.push_back(e.first);
+//			ok_ae->addEdge(wnetrze->vertices()[e.first], wnetrze->vertices()[e.second]);
+//		}
+//
+//		std::vector<std::shared_ptr<CMesh>> siatki;
+//
+//		UI::PROGRESSBAR::setValue(70);
+//
+//		for (auto l = 0; l < sz_loops.size(); l++) {
+//
+//			qInfo() << QString("loop: %1, size: %2").arg(l).arg(sz_loops[l].size());
+//
+//			result = BridgingByMidpointMatching(wierzch->vertices(), sz_loops[l], wnetrze->vertices(), IS_VZ, 8.0);
+//
+//			qInfo() << QString("---- vertices: %1, faces: %2").arg(result.first.size()).arg(result.second.size());
+//
+//			auto mostki = std::make_shared<CMesh>();
+//
+//			mostki->vertices() = result.first;
+//			mostki->faces() = result.second;
+//
+//			mostki->removeDuplicateVertices();
+//
+//			siatki.push_back(mostki);
+//		}
+//
+//		UI::PROGRESSBAR::setValue(90);
+//
+//		auto mesh1 = scalSiatki(siatki);
+//
+//		auto test = scalSiatki({ wierzch, wnetrze, mesh1 });
+//
+//		UI::PROGRESSBAR::hide();
+//
+//		return test;
+//	}
+//
+//	UI::PROGRESSBAR::hide();
+//
+//	return nullptr;
+//}
+//
 
+std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze) {
 	UI::PROGRESSBAR::init(0, 100, 0);
 	UI::PROGRESSBAR::setText("Bridging:");
 
-	if (wierzch && wnetrze)
-	{
-		wierzch->removeDuplicateVertices();
-		wnetrze->removeDuplicateVertices();
-
-		UI::PROGRESSBAR::setValue(10);
-
-		std::pair< std::vector<CVertex>, std::vector<CFace> > result;
-
-		std::vector<CEdge> sz_ed;
-		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> sz_bGraph;
-
-		findBoundaryEdgesWithDirection(wierzch->faces(), sz_ed, sz_bGraph);
-
-		UI::PROGRESSBAR::setValue(30);
-
-		std::vector<std::vector<INDEX_TYPE>> sz_loops = findBoundaryLoops(sz_bGraph);
-
-		UI::PROGRESSBAR::setValue(50);
-
-		auto sz_ae = std::make_shared<CAnnotationEdges>();
-
-		std::vector<INDEX_TYPE> IS_V;
-
-		for (auto e : sz_ed) {
-			IS_V.push_back(e.first);
-			sz_ae->addEdge(wierzch->vertices()[e.first], wierzch->vertices()[e.second]);
-		}
-
-
-		std::vector<CEdge> ok_ed;
-		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> ok_bGraph;
-
-		UI::PROGRESSBAR::setValue(55);
-
-		findBoundaryEdgesWithDirection(wnetrze->faces(), ok_ed, ok_bGraph);
-		std::vector<std::vector<INDEX_TYPE>> ok_loops = findBoundaryLoops(ok_bGraph);
-
-		UI::PROGRESSBAR::setValue(65);
-
-		auto ok_ae = std::make_shared<CAnnotationEdges>();
-
-		std::vector<INDEX_TYPE> IS_VZ;
-
-		for (auto e : ok_ed) {
-			IS_VZ.push_back(e.first);
-			ok_ae->addEdge(wnetrze->vertices()[e.first], wnetrze->vertices()[e.second]);
-		}
-
-		std::vector<std::shared_ptr<CMesh>> siatki;
-
-		UI::PROGRESSBAR::setValue(70);
-
-		for (auto l = 0; l < sz_loops.size(); l++) {
-
-			qInfo() << QString("loop: %1, size: %2").arg(l).arg(sz_loops[l].size());
-
-			result = BridgingByMidpointMatching(wierzch->vertices(), sz_loops[l], wnetrze->vertices(), IS_VZ, 8.0);
-
-			qInfo() << QString("---- vertices: %1, faces: %2").arg(result.first.size()).arg(result.second.size());
-
-			auto mostki = std::make_shared<CMesh>();
-
-			mostki->vertices() = result.first;
-			mostki->faces() = result.second;
-
-			mostki->removeDuplicateVertices();
-
-			siatki.push_back(mostki);
-		}
-
-		UI::PROGRESSBAR::setValue(90);
-
-		auto mesh1 = scalSiatki(siatki);
-
-		auto test = scalSiatki({ wierzch, wnetrze, mesh1 });
-
+	if (!wierzch || !wnetrze) {
 		UI::PROGRESSBAR::hide();
-
-		return test;
+		return nullptr;
 	}
 
-	UI::PROGRESSBAR::hide();
+	wierzch->removeDuplicateVertices();
+	wnetrze->removeDuplicateVertices();
 
-	return nullptr;
+	UI::PROGRESSBAR::setValue(10);
+
+	// 1. Znajdź krawędzie brzegowe
+	std::vector<CEdge> wierzch_edges, wnetrze_edges;
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> wierzch_graph, wnetrze_graph;
+
+	findBoundaryEdgesWithDirection(wierzch->faces(), wierzch_edges, wierzch_graph);
+	UI::PROGRESSBAR::setValue(30);
+
+	auto wierzch_loops = findBoundaryLoops(wierzch_graph);
+	UI::PROGRESSBAR::setValue(50);
+
+	findBoundaryEdgesWithDirection(wnetrze->faces(), wnetrze_edges, wnetrze_graph);
+	UI::PROGRESSBAR::setValue(65);
+
+	auto wnetrze_loops = findBoundaryLoops(wnetrze_graph);
+	UI::PROGRESSBAR::setValue(70);
+
+	// 2. KRYTYCZNA ZMIANA: Scalamy najpierw meshes, potem dodajemy mostki
+	auto combined = std::make_shared<CMesh>();
+
+	// Kopiuj wierzch
+	size_t wierzch_offset = 0;
+	for (const auto& v : wierzch->vertices()) {
+		combined->vertices().push_back(v);
+	}
+	for (const auto& f : wierzch->faces()) {
+		combined->faces().push_back(f);
+	}
+
+	// Kopiuj wnętrze
+	size_t wnetrze_offset = combined->vertices().size();
+	for (const auto& v : wnetrze->vertices()) {
+		combined->vertices().push_back(v);
+	}
+	for (const auto& f : wnetrze->faces()) {
+		combined->faces().emplace_back(
+			f.A() + wnetrze_offset,
+			f.B() + wnetrze_offset,
+			f.C() + wnetrze_offset
+		);
+	}
+
+	UI::PROGRESSBAR::setValue(75);
+
+	// 3. Dodaj mostki REUŻYWAJĄC istniejących wierzchołków
+	for (size_t loop_idx = 0; loop_idx < wierzch_loops.size(); ++loop_idx) {
+		const auto& loop = wierzch_loops[loop_idx];
+
+		qInfo() << "Bridging loop" << loop_idx << "size:" << loop.size();
+
+		for (size_t i = 0; i < loop.size(); ++i) {
+			size_t i_next = (i + 1) % loop.size();
+
+			INDEX_TYPE vA = loop[i] + wierzch_offset;       // Wierzchołek na wierzchu
+			INDEX_TYPE vB = loop[i_next] + wierzch_offset;
+
+			// Znajdź środek krawędzi
+			const CVertex& a = combined->vertices()[vA];
+			const CVertex& b = combined->vertices()[vB];
+			CVertex mid;
+			mid.x = (a.x + b.x) * 0.5f;
+			mid.y = (a.y + b.y) * 0.5f;
+			mid.z = (a.z + b.z) * 0.5f;
+
+			// Znajdź najbliższy wierzchołek z wnętrza
+			float minDist = std::numeric_limits<float>::max();
+			INDEX_TYPE bestVnetrze = -1;
+
+			for (const auto& e : wnetrze_edges) {
+				INDEX_TYPE candidate = e.first + wnetrze_offset;
+				float dist = squaredDistance(mid, combined->vertices()[candidate]);
+
+				if (dist < minDist) {
+					minDist = dist;
+					bestVnetrze = candidate;
+				}
+			}
+
+			if (bestVnetrze != static_cast<INDEX_TYPE>(-1) && minDist < 64.0f) { // 8mm^2
+				// Dodaj trójkąt REUŻYWAJĄC istniejących wierzchołków
+				combined->faces().emplace_back(vA, bestVnetrze, vB);
+			}
+		}
+	}
+
+	UI::PROGRESSBAR::setValue(90);
+
+	// 4. Usuń duplikaty (powinno być minimalnie potrzebne)
+	combined->removeDuplicateVertices(0.01f);
+
+	UI::PROGRESSBAR::hide();
+	return combined;
 }
+
+
+
 
 
 //----------------------------------------------------------------------------
@@ -2769,25 +3610,103 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 
 
 
-std::shared_ptr<CMesh> ConcretePlugin::filling(std::shared_ptr<CMesh> test)
-{
-	if (test)
-	{
-		test->removeDuplicateVertices();
+//std::shared_ptr<CMesh> ConcretePlugin::filling(std::shared_ptr<CMesh> test)
+//{
+//	if (test)
+//	{
+//		test->removeDuplicateVertices();
+//
+//		auto new_faces = FillBoundaryLoops(test->vertices(), test->faces());
+//
+//		auto nowe = std::make_shared<CMesh>();
+//
+//		nowe->vertices() = new_faces.first;
+//		nowe->faces() = new_faces.second;
+//
+//		nowe->removeDuplicateVertices();
+//
+//		auto full = scalSiatki({ test, nowe });
+//
+//		return full;
+//	}
+//
+//	return nullptr;
+//}
 
-		auto new_faces = FillBoundaryLoops(test->vertices(), test->faces());
+std::shared_ptr<CMesh> ConcretePlugin::filling(std::shared_ptr<CMesh> mesh) {
+	if (!mesh) return nullptr;
 
-		auto nowe = std::make_shared<CMesh>();
+	mesh->removeDuplicateVertices();
 
-		nowe->vertices() = new_faces.first;
-		nowe->faces() = new_faces.second;
+	UI::PROGRESSBAR::init(0, 100, 0);
+	UI::PROGRESSBAR::setText("Filling:");
 
-		nowe->removeDuplicateVertices();
+	// 1. Znajdź krawędzie brzegowe
+	std::vector<CEdge> boundaryEdges;
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> boundaryGraph;
 
-		auto full = scalSiatki({ test, nowe });
+	qInfo() << "Finding boundary edges...";
+	findBoundaryEdgesWithDirection(mesh->faces(), boundaryEdges, boundaryGraph);
+	qInfo() << "Found boundary edges:" << boundaryEdges.size();
 
-		return full;
+	UI::PROGRESSBAR::setValue(15);
+
+	auto loops = findBoundaryLoopsFromEdges(boundaryEdges);
+	qInfo() << "Found loops:" << loops.size();
+
+	UI::PROGRESSBAR::setValue(25);
+
+	// 2. KRYTYCZNA ZMIANA: Dodawaj trójkąty bezpośrednio do meshu
+	std::vector<CVertex>& vertices = mesh->vertices();
+	std::vector<CFace>& faces = mesh->faces();
+
+	int cnt = 0;
+	for (const auto& loop : loops) {
+		qInfo() << "Filling loop" << cnt++ << "size:" << loop.size();
+
+		if (loop.size() < 3) {
+			qInfo() << "INVALID LOOP (too small)";
+			continue;
+		}
+		if (loop.size() > 500) {
+			qInfo() << "INVALID LOOP (too large)";
+			continue;
+		}
+
+		if (loop.size() == 3) {
+			// Trójkąt już istnieje jako brzeg
+			faces.emplace_back(loop[0], loop[1], loop[2]);
+		}
+		else {
+			// Oblicz centroid
+			CVertex center = { 0, 0, 0 };
+			for (INDEX_TYPE idx : loop) {
+				center += vertices[idx];
+			}
+			center *= (1.0f / loop.size());
+
+			// Dodaj centroid
+			INDEX_TYPE centerIdx = vertices.size();
+			vertices.push_back(center);
+
+			// Dodaj wachlarze REUŻYWAJĄC istniejących wierzchołków brzegu
+			for (size_t i = 0; i < loop.size(); ++i) {
+				INDEX_TYPE vA = loop[i];
+				INDEX_TYPE vB = loop[(i + 1) % loop.size()];
+				faces.emplace_back(vA, centerIdx, vB);
+			}
+		}
+
+		UI::PROGRESSBAR::setValue(25 + cnt);
 	}
 
-	return nullptr;
+	// 3. Usuń duplikaty (minimalne - większość powinna być już wspólna)
+	mesh->removeDuplicateVertices(0.001f);
+
+	UI::PROGRESSBAR::hide();
+	qInfo() << "Filling complete. Final faces:" << mesh->faces().size();
+
+	return mesh;
 }
+
+
