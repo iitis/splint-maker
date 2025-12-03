@@ -28,6 +28,7 @@
 #include <QDebug>
 //#include "dpLog.h"
 
+#include "MeshTools.h"
 
 struct Vec3 {
 	float x, y, z;
@@ -1256,252 +1257,252 @@ void ConcretePlugin::etap11()
 //	UI::STATUSBAR::setText("Subdivision complete");
 //}
 
-// Funkcja oblicza aspect ratio trójkąta (stosunek najdłuższej krawędzi do wysokości)
-float calculateAspectRatio(const CVertex& v0, const CVertex& v1, const CVertex& v2) {
-	CVector3d e0 = CVector3d(v0, v1);
-	CVector3d e1 = CVector3d(v1, v2);
-	CVector3d e2 = CVector3d(v2, v0);
+//// Funkcja oblicza aspect ratio trójkąta (stosunek najdłuższej krawędzi do wysokości)
+//float calculateAspectRatio(const CVertex& v0, const CVertex& v1, const CVertex& v2) {
+//	CVector3d e0 = CVector3d(v0, v1);
+//	CVector3d e1 = CVector3d(v1, v2);
+//	CVector3d e2 = CVector3d(v2, v0);
+//
+//	float len0 = e0.length();
+//	float len1 = e1.length();
+//	float len2 = e2.length();
+//
+//	float longest = std::max({ len0, len1, len2 });
+//	float perimeter = len0 + len1 + len2;
+//
+//	// Pole trójkąta za pomocą wzoru Herona
+//	float s = perimeter / 2.0f;
+//	float area = std::sqrt(s * (s - len0) * (s - len1) * (s - len2));
+//
+//	if (area < 1e-6f) return 1000.0f; // Zdegenerowany trójkąt
+//
+//	// Wysokość z najdłuższej krawędzi
+//	float height = 2.0f * area / longest;
+//
+//	return longest / height; // Aspect ratio
+//}
 
-	float len0 = e0.length();
-	float len1 = e1.length();
-	float len2 = e2.length();
-
-	float longest = std::max({ len0, len1, len2 });
-	float perimeter = len0 + len1 + len2;
-
-	// Pole trójkąta za pomocą wzoru Herona
-	float s = perimeter / 2.0f;
-	float area = std::sqrt(s * (s - len0) * (s - len1) * (s - len2));
-
-	if (area < 1e-6f) return 1000.0f; // Zdegenerowany trójkąt
-
-	// Wysokość z najdłuższej krawędzi
-	float height = 2.0f * area / longest;
-
-	return longest / height; // Aspect ratio
-}
-
-// KLUCZOWA FUNKCJA: Hash dla krawędzi (aby środkowe wierzchołki były wspólne)
-struct EdgeHasher {
-	std::size_t operator()(const std::pair<INDEX_TYPE, INDEX_TYPE>& edge) const {
-		// Zawsze sortuj, aby (A,B) i (B,A) dawały ten sam hash
-		INDEX_TYPE a = std::min(edge.first, edge.second);
-		INDEX_TYPE b = std::max(edge.first, edge.second);
-		return std::hash<INDEX_TYPE>()(a) ^ (std::hash<INDEX_TYPE>()(b) << 1);
-	}
-};
-
-
-
-
-
-#include <unordered_set>
-
-
-void subdivideNarrowFaces(std::shared_ptr<CMesh> mesh,
-	float aspectRatioThreshold = 5.0f,
-	int maxIterations = 3)
-{
-	if (!mesh) return;
-
-	using Edge = std::pair<INDEX_TYPE, INDEX_TYPE>;
-
-	UI::STATUSBAR::setText("Subdividing narrow faces...");
-	qInfo() << "=== SUBDIVIDE NARROW FACES: START ===";
-	qInfo() << "Initial faces:" << mesh->faces().size()
-		<< ", vertices:" << mesh->vertices().size();
-	qInfo() << "Aspect ratio threshold:" << aspectRatioThreshold;
-
-	for (int iteration = 0; iteration < maxIterations; ++iteration) {
-		qInfo() << "Iteration" << (iteration + 1) << "/" << maxIterations;
-
-		std::vector<CFace>& faces = mesh->faces();
-		std::vector<CVertex>& verts = mesh->vertices();
-
-		const size_t faceCount = faces.size();
-		if (faceCount == 0) break;
-
-		// 1) Wyznaczamy zbiór krawędzi do podziału (edge-based)
-		std::unordered_set<Edge, EdgeHasher> edgesToSplit;
-		edgesToSplit.reserve(faceCount * 2);
-
-		for (INDEX_TYPE i = 0; i < static_cast<INDEX_TYPE>(faceCount); ++i) {
-			const CFace& f = faces[i];
-			const CVertex& v0 = verts[f.A()];
-			const CVertex& v1 = verts[f.B()];
-			const CVertex& v2 = verts[f.C()];
-
-			float aspect = calculateAspectRatio(v0, v1, v2);
-			if (aspect <= aspectRatioThreshold)
-				continue;
-
-			CVector3d e0(v0, v1), e1(v1, v2), e2(v2, v0);
-			float len0 = e0.length();
-			float len1 = e1.length();
-			float len2 = e2.length();
-
-			Edge eAB = std::minmax(f.A(), f.B());
-			Edge eBC = std::minmax(f.B(), f.C());
-			Edge eCA = std::minmax(f.C(), f.A());
-
-			// Sortuj krawędzie wg długości (malejąco)
-			std::vector<std::pair<float, Edge>> sortedEdges = {
-				{len0, eAB}, {len1, eBC}, {len2, eCA}
-			};
-			std::sort(sortedEdges.begin(), sortedEdges.end(),
-				[](const auto& a, const auto& b) {
-					return a.first > b.first;
-				});
-
-			float longest = sortedEdges[0].first;
-			float secondLongest = sortedEdges[1].first;
-			float shortest = sortedEdges[2].first;
-
-			// Jeśli 2 długie krawędzie (różnica > 50%), oznacz obie
-			if (secondLongest > shortest * 1.5f) {
-				edgesToSplit.insert(sortedEdges[0].second);
-				edgesToSplit.insert(sortedEdges[1].second);
-			}
-			else {
-				edgesToSplit.insert(sortedEdges[0].second);
-			}
-		}
-
-		if (edgesToSplit.empty()) {
-			qInfo() << "No narrow faces above threshold, stopping early.";
-			break;
-		}
-
-		qInfo() << "Edges to split:" << edgesToSplit.size();
-
-		// 2) Właściwa subdivizja
-		std::unordered_map<Edge, INDEX_TYPE, EdgeHasher> edgeMidpoints;
-		edgeMidpoints.reserve(edgesToSplit.size());
-
-		std::vector<CFace> newFaces;
-		newFaces.reserve(faceCount * 2);
-
-		auto getMidpoint = [&](const Edge& e, INDEX_TYPE i0, INDEX_TYPE i1) -> INDEX_TYPE {
-			auto it = edgeMidpoints.find(e);
-			if (it != edgeMidpoints.end())
-				return it->second;
-
-			const CVertex& a = verts[i0];
-			const CVertex& b = verts[i1];
-
-			CVertex mid;
-			mid.x = (a.x + b.x) * 0.5f;
-			mid.y = (a.y + b.y) * 0.5f;
-			mid.z = (a.z + b.z) * 0.5f;
-
-			INDEX_TYPE midIdx = static_cast<INDEX_TYPE>(verts.size());
-			verts.push_back(mid);
-			edgeMidpoints[e] = midIdx;
-			return midIdx;
-			};
-
-		int subdivided = 0;
-		int count1 = 0, count2 = 0, count3 = 0; // Statystyki
-
-		for (INDEX_TYPE i = 0; i < static_cast<INDEX_TYPE>(faceCount); ++i) {
-			const CFace& f = faces[i];
-
-			INDEX_TYPE A = f.A();
-			INDEX_TYPE B = f.B();
-			INDEX_TYPE C = f.C();
-
-			Edge eAB = std::minmax(A, B);
-			Edge eBC = std::minmax(B, C);
-			Edge eCA = std::minmax(C, A);
-
-			bool splitAB = edgesToSplit.count(eAB) > 0;
-			bool splitBC = edgesToSplit.count(eBC) > 0;
-			bool splitCA = edgesToSplit.count(eCA) > 0;
-
-			int splitCount = (splitAB ? 1 : 0) + (splitBC ? 1 : 0) + (splitCA ? 1 : 0);
-
-			if (splitCount == 0) {
-				newFaces.push_back(f);
-				continue;
-			}
-
-			subdivided++;
-
-			if (splitCount == 1) {
-				count1++;
-				if (splitAB) {
-					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
-					newFaces.emplace_back(A, mAB, C);
-					newFaces.emplace_back(mAB, B, C);
-				}
-				else if (splitBC) {
-					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
-					newFaces.emplace_back(B, mBC, A);
-					newFaces.emplace_back(mBC, C, A);
-				}
-				else {
-					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
-					newFaces.emplace_back(C, mCA, B);
-					newFaces.emplace_back(mCA, A, B);
-				}
-
-			}
-			else if (splitCount == 2) {
-				count2++;
-				if (splitAB && splitBC) {
-					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
-					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
-					newFaces.emplace_back(A, mAB, C);
-					newFaces.emplace_back(mAB, mBC, C);
-					newFaces.emplace_back(mAB, B, mBC);
-
-				}
-				else if (splitBC && splitCA) {
-					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
-					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
-					newFaces.emplace_back(B, mBC, A);
-					newFaces.emplace_back(mBC, mCA, A);
-					newFaces.emplace_back(mBC, C, mCA);
-
-				}
-				else {
-					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
-					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
-					newFaces.emplace_back(C, mCA, B);
-					newFaces.emplace_back(mCA, mAB, B);
-					newFaces.emplace_back(mCA, A, mAB);
-				}
-
-			}
-			else {
-				count3++;
-				INDEX_TYPE mAB = getMidpoint(eAB, A, B);
-				INDEX_TYPE mBC = getMidpoint(eBC, B, C);
-				INDEX_TYPE mCA = getMidpoint(eCA, C, A);
-
-				newFaces.emplace_back(A, mAB, mCA);
-				newFaces.emplace_back(B, mBC, mAB);
-				newFaces.emplace_back(C, mCA, mBC);
-				newFaces.emplace_back(mAB, mBC, mCA);
-			}
-		}
-
-		qInfo() << "Subdivided:" << subdivided
-			<< " (1-edge:" << count1 << ", 2-edge:" << count2 << ", 3-edge:" << count3 << ")"
-			<< ", New faces:" << newFaces.size()
-			<< ", Vertices:" << verts.size();
-
-		faces = std::move(newFaces);
-
-		if (subdivided == 0) break;
-	}
-
-	qInfo() << "Final faces:" << mesh->faces().size()
-		<< ", vertices:" << mesh->vertices().size();
-	qInfo() << "=== SUBDIVIDE NARROW FACES: END ===";
-	UI::STATUSBAR::setText("Subdivision complete");
-}
-
+//// KLUCZOWA FUNKCJA: Hash dla krawędzi (aby środkowe wierzchołki były wspólne)
+//struct EdgeHasher {
+//	std::size_t operator()(const std::pair<INDEX_TYPE, INDEX_TYPE>& edge) const {
+//		// Zawsze sortuj, aby (A,B) i (B,A) dawały ten sam hash
+//		INDEX_TYPE a = std::min(edge.first, edge.second);
+//		INDEX_TYPE b = std::max(edge.first, edge.second);
+//		return std::hash<INDEX_TYPE>()(a) ^ (std::hash<INDEX_TYPE>()(b) << 1);
+//	}
+//};
+//
+//
+//
+//
+//
+//#include <unordered_set>
+//
+//
+//void subdivideNarrowFaces(std::shared_ptr<CMesh> mesh,
+//	float aspectRatioThreshold = 5.0f,
+//	int maxIterations = 3)
+//{
+//	if (!mesh) return;
+//
+//	using Edge = std::pair<INDEX_TYPE, INDEX_TYPE>;
+//
+//	UI::STATUSBAR::setText("Subdividing narrow faces...");
+//	qInfo() << "=== SUBDIVIDE NARROW FACES: START ===";
+//	qInfo() << "Initial faces:" << mesh->faces().size()
+//		<< ", vertices:" << mesh->vertices().size();
+//	qInfo() << "Aspect ratio threshold:" << aspectRatioThreshold;
+//
+//	for (int iteration = 0; iteration < maxIterations; ++iteration) {
+//		qInfo() << "Iteration" << (iteration + 1) << "/" << maxIterations;
+//
+//		std::vector<CFace>& faces = mesh->faces();
+//		std::vector<CVertex>& verts = mesh->vertices();
+//
+//		const size_t faceCount = faces.size();
+//		if (faceCount == 0) break;
+//
+//		// 1) Wyznaczamy zbiór krawędzi do podziału (edge-based)
+//		std::unordered_set<Edge, EdgeHasher> edgesToSplit;
+//		edgesToSplit.reserve(faceCount * 2);
+//
+//		for (INDEX_TYPE i = 0; i < static_cast<INDEX_TYPE>(faceCount); ++i) {
+//			const CFace& f = faces[i];
+//			const CVertex& v0 = verts[f.A()];
+//			const CVertex& v1 = verts[f.B()];
+//			const CVertex& v2 = verts[f.C()];
+//
+//			float aspect = calculateAspectRatio(v0, v1, v2);
+//			if (aspect <= aspectRatioThreshold)
+//				continue;
+//
+//			CVector3d e0(v0, v1), e1(v1, v2), e2(v2, v0);
+//			float len0 = e0.length();
+//			float len1 = e1.length();
+//			float len2 = e2.length();
+//
+//			Edge eAB = std::minmax(f.A(), f.B());
+//			Edge eBC = std::minmax(f.B(), f.C());
+//			Edge eCA = std::minmax(f.C(), f.A());
+//
+//			// Sortuj krawędzie wg długości (malejąco)
+//			std::vector<std::pair<float, Edge>> sortedEdges = {
+//				{len0, eAB}, {len1, eBC}, {len2, eCA}
+//			};
+//			std::sort(sortedEdges.begin(), sortedEdges.end(),
+//				[](const auto& a, const auto& b) {
+//					return a.first > b.first;
+//				});
+//
+//			float longest = sortedEdges[0].first;
+//			float secondLongest = sortedEdges[1].first;
+//			float shortest = sortedEdges[2].first;
+//
+//			// Jeśli 2 długie krawędzie (różnica > 50%), oznacz obie
+//			if (secondLongest > shortest * 1.5f) {
+//				edgesToSplit.insert(sortedEdges[0].second);
+//				edgesToSplit.insert(sortedEdges[1].second);
+//			}
+//			else {
+//				edgesToSplit.insert(sortedEdges[0].second);
+//			}
+//		}
+//
+//		if (edgesToSplit.empty()) {
+//			qInfo() << "No narrow faces above threshold, stopping early.";
+//			break;
+//		}
+//
+//		qInfo() << "Edges to split:" << edgesToSplit.size();
+//
+//		// 2) Właściwa subdivizja
+//		std::unordered_map<Edge, INDEX_TYPE, EdgeHasher> edgeMidpoints;
+//		edgeMidpoints.reserve(edgesToSplit.size());
+//
+//		std::vector<CFace> newFaces;
+//		newFaces.reserve(faceCount * 2);
+//
+//		auto getMidpoint = [&](const Edge& e, INDEX_TYPE i0, INDEX_TYPE i1) -> INDEX_TYPE {
+//			auto it = edgeMidpoints.find(e);
+//			if (it != edgeMidpoints.end())
+//				return it->second;
+//
+//			const CVertex& a = verts[i0];
+//			const CVertex& b = verts[i1];
+//
+//			CVertex mid;
+//			mid.x = (a.x + b.x) * 0.5f;
+//			mid.y = (a.y + b.y) * 0.5f;
+//			mid.z = (a.z + b.z) * 0.5f;
+//
+//			INDEX_TYPE midIdx = static_cast<INDEX_TYPE>(verts.size());
+//			verts.push_back(mid);
+//			edgeMidpoints[e] = midIdx;
+//			return midIdx;
+//			};
+//
+//		int subdivided = 0;
+//		int count1 = 0, count2 = 0, count3 = 0; // Statystyki
+//
+//		for (INDEX_TYPE i = 0; i < static_cast<INDEX_TYPE>(faceCount); ++i) {
+//			const CFace& f = faces[i];
+//
+//			INDEX_TYPE A = f.A();
+//			INDEX_TYPE B = f.B();
+//			INDEX_TYPE C = f.C();
+//
+//			Edge eAB = std::minmax(A, B);
+//			Edge eBC = std::minmax(B, C);
+//			Edge eCA = std::minmax(C, A);
+//
+//			bool splitAB = edgesToSplit.count(eAB) > 0;
+//			bool splitBC = edgesToSplit.count(eBC) > 0;
+//			bool splitCA = edgesToSplit.count(eCA) > 0;
+//
+//			int splitCount = (splitAB ? 1 : 0) + (splitBC ? 1 : 0) + (splitCA ? 1 : 0);
+//
+//			if (splitCount == 0) {
+//				newFaces.push_back(f);
+//				continue;
+//			}
+//
+//			subdivided++;
+//
+//			if (splitCount == 1) {
+//				count1++;
+//				if (splitAB) {
+//					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+//					newFaces.emplace_back(A, mAB, C);
+//					newFaces.emplace_back(mAB, B, C);
+//				}
+//				else if (splitBC) {
+//					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+//					newFaces.emplace_back(B, mBC, A);
+//					newFaces.emplace_back(mBC, C, A);
+//				}
+//				else {
+//					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+//					newFaces.emplace_back(C, mCA, B);
+//					newFaces.emplace_back(mCA, A, B);
+//				}
+//
+//			}
+//			else if (splitCount == 2) {
+//				count2++;
+//				if (splitAB && splitBC) {
+//					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+//					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+//					newFaces.emplace_back(A, mAB, C);
+//					newFaces.emplace_back(mAB, mBC, C);
+//					newFaces.emplace_back(mAB, B, mBC);
+//
+//				}
+//				else if (splitBC && splitCA) {
+//					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+//					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+//					newFaces.emplace_back(B, mBC, A);
+//					newFaces.emplace_back(mBC, mCA, A);
+//					newFaces.emplace_back(mBC, C, mCA);
+//
+//				}
+//				else {
+//					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+//					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+//					newFaces.emplace_back(C, mCA, B);
+//					newFaces.emplace_back(mCA, mAB, B);
+//					newFaces.emplace_back(mCA, A, mAB);
+//				}
+//
+//			}
+//			else {
+//				count3++;
+//				INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+//				INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+//				INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+//
+//				newFaces.emplace_back(A, mAB, mCA);
+//				newFaces.emplace_back(B, mBC, mAB);
+//				newFaces.emplace_back(C, mCA, mBC);
+//				newFaces.emplace_back(mAB, mBC, mCA);
+//			}
+//		}
+//
+//		qInfo() << "Subdivided:" << subdivided
+//			<< " (1-edge:" << count1 << ", 2-edge:" << count2 << ", 3-edge:" << count3 << ")"
+//			<< ", New faces:" << newFaces.size()
+//			<< ", Vertices:" << verts.size();
+//
+//		faces = std::move(newFaces);
+//
+//		if (subdivided == 0) break;
+//	}
+//
+//	qInfo() << "Final faces:" << mesh->faces().size()
+//		<< ", vertices:" << mesh->vertices().size();
+//	qInfo() << "=== SUBDIVIDE NARROW FACES: END ===";
+//	UI::STATUSBAR::setText("Subdivision complete");
+//}
+//
 
 
 void ConcretePlugin::etap123(double dValIn, double dValOut)
@@ -1715,7 +1716,11 @@ void ConcretePlugin::wytlaczanie()
 		UI::STATUSBAR::setText("Filling holes in the surface");
 
 		if (auto filled = filling(bridged)) {
-			subdivideNarrowFaces(filled, 5.0f, 4);
+
+			//szyna gotowa - sprzątanie
+			MeshTools::repairMesh(*filled.get());
+			MeshTools::subdivideNarrowFaces(filled, 5.0f, 5);
+
 			filled->setLabel("szyna");
 			CWorkspace::instance()->_objectAdd(filled);
 			filled->getParentPtr()->setLabel("szyna");

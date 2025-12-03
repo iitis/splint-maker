@@ -144,11 +144,13 @@
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|x64'">input</DynamicSource>
       <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
     </ClCompile>
+    <ClCompile Include="MeshTools.cpp" />
     <ClCompile Include="Siateczka1.cpp" />
     <ClCompile Include="BiteSim.cpp" />
     <ClCompile Include="VoxelGrid.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="MeshTools.h" />
     <ClInclude Include="VoxelGrid.h" />
     <QtMoc Include="ConcretePlugin.h" />
     <QtMoc Include="..\..\dpVision\src\gui\ProgressIndicator.h" />
