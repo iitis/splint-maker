@@ -83,7 +83,7 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <AdditionalIncludeDirectories>$(SolutionDir)zPlugins\nowaSzyna\;$(SolutionDir)dpVision\src\;$(SolutionDir)dpVision\src\core\;$(SolutionDir)dpVision\src\libs\PluginManager\;$(SolutionDir)3rd_party\OpenCV\include\;$(SolutionDir)3rd_party\QuaZip\include\;$(SolutionDir)3rd_party\include\;$(SolutionDir)3rd_party\include\boost\;$(SolutionDir)msvc\GeneratedFiles\$(ConfigurationName);$(SolutionDir)msvc\GeneratedFiles;$(Qt_INCLUDEPATH_);$(QtDir)\include\QtZlib</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DPVISION_PLUGIN_DLL;WIN64;NDEBUG;_WINDOWS;_USRDLL;PLUGINDLL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DPVISION_PLUGIN_DLL;DPVISION_LEGACY_API_STATIC;WIN64;NDEBUG;_WINDOWS;_USRDLL;PLUGINDLL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -112,7 +112,7 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <AdditionalIncludeDirectories>$(SolutionDir)zPlugins\nowaSzyna\;$(SolutionDir)dpVision\src\;$(SolutionDir)dpVision\src\core\;$(SolutionDir)dpVision\src\libs\PluginManager\;$(SolutionDir)3rd_party\OpenCV\include\;$(SolutionDir)3rd_party\QuaZip\include\;$(SolutionDir)3rd_party\include\;$(SolutionDir)3rd_party\include\boost\;$(SolutionDir)msvc\GeneratedFiles\$(ConfigurationName);$(SolutionDir)msvc\GeneratedFiles;$(Qt_INCLUDEPATH_);$(QtDir)\include\QtZlib</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DPVISION_PLUGIN_DLL;WIN64;NDEBUG;_WINDOWS;_USRDLL;PLUGINDLL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DPVISION_PLUGIN_DLL;DPVISION_LEGACY_API_STATIC;WIN64;NDEBUG;_WINDOWS;_USRDLL;PLUGINDLL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -151,7 +151,7 @@
   <ItemGroup>
     <ClInclude Include="VoxelGrid.h" />
     <QtMoc Include="ConcretePlugin.h" />
-   <ClInclude Include="CollisionDetector.h" />
+    <ClInclude Include="CollisionDetector.h" />
     <ClInclude Include="CollisionDetector_definitions.h" />
     <QtMoc Include="moje_widgety.h" />
     <ClInclude Include="Siateczka1.h" />
@@ -172,7 +172,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
- </ItemGroup>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
     <Import Project="$(QtMsBuild)\qt.targets" />
