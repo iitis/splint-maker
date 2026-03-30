@@ -10,7 +10,7 @@
 #include "../api/AP.h"
 #include "../api/UI.h"
 
-#include "AppSettings.h"
+#include "../api/adapters/AppAPIAdapter.h"
 
 #include "NewEdge.h"
 #include "Vector3.h"
@@ -19,7 +19,6 @@
 
 #include "FileConnector.h"
 
-#include "../gui/ProgressIndicator.h"
 //#include "interfaces/IProgressListener.h"
 
 #include <memory>
@@ -29,6 +28,14 @@
 //#include "dpLog.h"
 
 #include "MeshTools.h"
+
+namespace {
+AppAPIAdapter& appApi()
+{
+    static AppAPIAdapter api;
+    return api;
+}
+}
 
 struct Vec3 {
 	float x, y, z;
@@ -134,7 +141,9 @@ ConcretePlugin::ConcretePlugin(void)
 
 	m_divider = 10;
 
-	QObject::connect(this, &ConcretePlugin::setProgressBarValue, UI::PROGRESSBAR::instance(), &ProgressIndicator::setValue);
+	QObject::connect(this, &ConcretePlugin::setProgressBarValue, this, [](int value) {
+		UI::PROGRESSBAR::setValue(value);
+	}, Qt::QueuedConnection);
 }
 
 
@@ -597,7 +606,7 @@ std::shared_ptr<CMesh> meshWithKeywordInLabel(QString keyword, CObject::Children
 void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 {
 	QString fileName = QDir::toNativeSeparators(
-		QFileDialog::getOpenFileName( 0, QString::fromUtf8("Select upper jaw file"), AppSettings::mainSettings()->value("recentFile").toString(), CFileConnector::getLoadExts())
+		QFileDialog::getOpenFileName( 0, QString::fromUtf8("Select upper jaw file"), appApi().settings().value("recentFile").toString(), CFileConnector::getLoadExts())
 	);
 
 	if (!fileName.isEmpty() && QFileInfo(fileName).exists()) {
@@ -609,7 +618,7 @@ void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 		}
 
 		if (obj->hasChildren()) {
-			AppSettings::mainSettings()->setValue("recentFile", fileName);
+			appApi().settings().setValue("recentFile", fileName);
 		}
 
 		UI::updateAllViews();
@@ -1613,7 +1622,7 @@ void ConcretePlugin::wytlaczanie()
 {
 	CObject::Children kids;
 
-	for (const auto& kid : CWorkspace::instance()->children())
+	for (const auto& kid : appApi().workspace().children())
 	{
 		kids[kid.first] = kid.second;
 	}
@@ -1748,8 +1757,8 @@ void decapitation(std::shared_ptr<CBaseObject> victim, std::shared_ptr<CAnnotati
 
 	CPlane p = *guillotine;
 
-	CPoint3d p1 = p.m_center;
-	CPoint3d p2 = p1 + p.m_normal;
+	CPoint3d p1 = p.getCenter();
+	CPoint3d p2 = p1 + p.getNormal();
 
 	Eigen::Matrix4d T0 = CBaseObject::getGlobalTransformationMatrix(guillotine);
 
@@ -1762,8 +1771,8 @@ void decapitation(std::shared_ptr<CBaseObject> victim, std::shared_ptr<CAnnotati
 	p1 = T1inv * p1; // do wsp. szczeka_obj
 	p2 = T1inv * p2;
 
-	p.m_center = p1;
-	p.m_normal = CVector3d(p1, p2).getNormalized();
+	p.setCenter(p1);
+	p.setNormal(CVector3d(p1, p2).getNormalized());
 
 
 	if ((victim->hasType(CObject::CLOUD)) || (victim->hasType(CObject::ORDEREDCLOUD)))
@@ -1881,7 +1890,7 @@ void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 
 void ConcretePlugin::save_all()
 {
-	QFileInfo fi(AppSettings::mainSettings()->value("recentFile").toString());
+	QFileInfo fi(appApi().settings().value("recentFile").toString());
 
 	QString init_path = QString("%1/szyna.obj").arg(fi.absoluteDir().absolutePath());
 
@@ -1897,7 +1906,7 @@ void ConcretePlugin::save_all()
 
 	CObject::Children kids;
 
-	for (const auto& kid : AP::WORKSPACE::instance()->children())
+	for (const auto& kid : appApi().workspace().children())
 	{
 		kids[kid.first] = kid.second;
 	}
