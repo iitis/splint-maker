@@ -35,6 +35,8 @@ public:
 	BiteSim(void) {};
 	~BiteSim(void) {};
 
+	void usunNiepasujaceZeroweSciankiWnetrza();
+
 	void create_inner_surface(CSiateczka1* wnetrze, float d = 0.2f);
 	void create_outer_surface(double dVal, std::shared_ptr<CMesh> zuch);
 };

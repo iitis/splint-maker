@@ -10,7 +10,7 @@
 #include "../api/AP.h"
 #include "../api/UI.h"
 
-#include "AppSettings.h"
+#include "../api/adapters/AppAPIAdapter.h"
 
 #include "NewEdge.h"
 #include "Vector3.h"
@@ -19,7 +19,6 @@
 
 #include "FileConnector.h"
 
-#include "../gui/ProgressIndicator.h"
 //#include "interfaces/IProgressListener.h"
 
 #include <memory>
@@ -27,6 +26,100 @@
 
 #include <QDebug>
 //#include "dpLog.h"
+
+#include "MeshTools.h"
+
+namespace {
+AppAPIAdapter& appApi()
+{
+    static AppAPIAdapter api;
+    return api;
+}
+}
+
+struct Vec3 {
+	float x, y, z;
+
+	Vec3 operator-(const Vec3& other) const {
+		return Vec3{ x - other.x, y - other.y, z - other.z };
+	}
+
+	float dot(const Vec3& other) const {
+		return x * other.x + y * other.y + z * other.z;
+	}
+
+	Vec3 cross(const Vec3& other) const {
+		return Vec3{
+			y * other.z - z * other.y,
+			z * other.x - x * other.z,
+			x * other.y - y * other.x
+		};
+	}
+
+	float norm() const {
+		return std::sqrt(dot(*this));
+	}
+};
+
+
+float distancePointToTriangle(
+	float px, float py, float pz,
+	const CVertex& v0, const CVertex& v1, const CVertex& v2)
+{
+	Vec3 p{ px, py, pz };
+	Vec3 a{ v0.x, v0.y, v0.z };
+	Vec3 b{ v1.x, v1.y, v1.z };
+	Vec3 c{ v2.x, v2.y, v2.z };
+
+	// edge vectors
+	Vec3 ab = b - a;
+	Vec3 ac = c - a;
+	Vec3 ap = p - a;
+
+	float d1 = ab.dot(ap);
+	float d2 = ac.dot(ap);
+
+	if (d1 <= 0 && d2 <= 0) return (p - a).norm(); // barycentric region outside A
+
+	Vec3 bp = p - b;
+	float d3 = ab.dot(bp);
+	float d4 = ac.dot(bp);
+	if (d3 >= 0 && d4 <= d3) return (p - b).norm(); // outside B
+
+	float vc = d1 * d4 - d3 * d2;
+	if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+		float v = d1 / (d1 - d3);
+		Vec3 proj = Vec3{ a.x + v * ab.x, a.y + v * ab.y, a.z + v * ab.z };
+		return (p - proj).norm(); // on edge AB
+	}
+
+	Vec3 cp = p - c;
+	float d5 = ab.dot(cp);
+	float d6 = ac.dot(cp);
+	if (d6 >= 0 && d5 <= d6) return (p - c).norm(); // outside C
+
+	float vb = d5 * d2 - d1 * d6;
+	if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+		float w = d2 / (d2 - d6);
+		Vec3 proj = Vec3{ a.x + w * ac.x, a.y + w * ac.y, a.z + w * ac.z };
+		return (p - proj).norm(); // on edge AC
+	}
+
+	float va = d3 * d6 - d5 * d4;
+	if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
+		float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+		Vec3 edge = Vec3{ c.x - b.x, c.y - b.y, c.z - b.z };
+		Vec3 proj = Vec3{ b.x + w * edge.x, b.y + w * edge.y, b.z + w * edge.z };
+		return (p - proj).norm(); // on edge BC
+	}
+
+	// inside face region
+	Vec3 n = ab.cross(ac);
+	n = Vec3{ n.x / n.norm(), n.y / n.norm(), n.z / n.norm() }; // unit normal
+	float dist = std::abs((p - a).dot(n));
+	return dist;
+}
+
 
 ConcretePlugin::ConcretePlugin(void)
 {
@@ -44,41 +137,52 @@ ConcretePlugin::ConcretePlugin(void)
 	symulator = nullptr;
 
 	m_cutPlane = nullptr;
+	m_projectionPlane = nullptr;
 
 	m_divider = 10;
 
-	QObject::connect(this, &ConcretePlugin::setProgressBarValue, UI::PROGRESSBAR::instance(), &ProgressIndicator::setValue);
+	QObject::connect(this, &ConcretePlugin::setProgressBarValue, this, [](int value) {
+		UI::PROGRESSBAR::setValue(value);
+	}, Qt::QueuedConnection);
 }
 
 
+#include "KDNode2.h"
 
-std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szczeka, std::shared_ptr<CMesh>  zuchwa, double dist = 3.0)
+std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzjeORG(std::shared_ptr<CMesh>  szczeka, std::shared_ptr<CMesh>  zuchwa, double dist = 3.0)
 {
 	std::set<size_t> good;
-
-	CMesh::KDtree *kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
+	CMesh::KDtree* kd = &zuchwa->getKDtree(CMesh::KDtree::REBUILD);
 
 	UI::STATUSBAR::setText("Looking for unwanted vertices. Please wait...");
-	UI::PROGRESSBAR::init(0, szczeka->vertices().size(), 0);
 
-	int progress = 0;
+	const int num_vertices = szczeka->vertices().size();
+	UI::PROGRESSBAR::init(0, num_vertices, 0);
 
-#pragma omp parallel for
-	for (long idx = 0; idx < szczeka->vertices().size(); idx++)
+	std::atomic<int> progress(0);
+
+	#pragma omp parallel for
+	for (long idx = 0; idx < num_vertices; idx++)
 	{
 		CVertex& v = szczeka->vertices()[idx];
 
-		if (kd->is_any_in_distance_to_pt(dist,v))
-			good.insert(idx);
-
-#pragma omp atomic
-		progress++;
-
-#pragma omp critical
+		if (kd->is_any_in_distance_to_pt(dist, v))
 		{
-			emit setProgressBarValue(progress);
+			#pragma omp critical
+			{
+				good.insert(idx);
+			}
 		}
 
+		// Progress update - thread-safe dzięki emit + critical
+		int current_progress = ++progress;
+		const int update_interval = std::max(1, num_vertices / 100);
+		if (current_progress % update_interval == 0) {
+			#pragma omp critical
+			{
+				emit setProgressBarValue(current_progress);  // ← THREAD-SAFE
+			}
+		}
 	}
 
 	zuchwa->removeKDtree();
@@ -91,23 +195,27 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 	std::vector<CFace>& faces = okluzja->faces();
 	std::vector<bool> toErase(faces.size(), false);
 
-	UI::PROGRESSBAR::init(0, faces.size(), 0);
+	const int num_faces = faces.size();
+	UI::PROGRESSBAR::init(0, num_faces, 0);
 	progress = 0;
 
-#pragma omp parallel for
-	for (int idx = 0; idx < faces.size(); ++idx) {
+	#pragma omp parallel for
+	for (int idx = 0; idx < num_faces; ++idx) {
 		CFace& f = faces[idx];
 
-		if ((good.find(f.A()) == good.end()) || (good.find(f.B()) == good.end()) || (good.find(f.C()) == good.end())) {
+		if ((good.find(f.A()) == good.end()) ||
+			(good.find(f.B()) == good.end()) ||
+			(good.find(f.C()) == good.end())) {
 			toErase[idx] = true;
 		}
 
-#pragma omp atomic
-		++progress;
-
-#pragma omp critical
-		{
-			emit setProgressBarValue(progress);
+		int current_progress = ++progress;
+		const int update_interval = std::max(1, num_faces / 100);
+		if (current_progress % update_interval == 0) {
+			#pragma omp critical
+			{
+				emit setProgressBarValue(current_progress);  // ← THREAD-SAFE
+			}
 		}
 	}
 
@@ -127,6 +235,312 @@ std::shared_ptr<CMesh>  ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh>  szcz
 
 	return okluzja;
 }
+
+// Dodaj funkcję pomocniczą do znajdowania najbliższego punktu na trójkącie
+CPoint3d closestPointOnTriangle(const CPoint3d& p, const CVertex& v0, const CVertex& v1, const CVertex& v2)
+{
+	Vec3 point{ p.x, p.y, p.z };
+	Vec3 a{ v0.x, v0.y, v0.z };
+	Vec3 b{ v1.x, v1.y, v1.z };
+	Vec3 c{ v2.x, v2.y, v2.z };
+
+	Vec3 ab = b - a;
+	Vec3 ac = c - a;
+	Vec3 ap = point - a;
+
+	float d1 = ab.dot(ap);
+	float d2 = ac.dot(ap);
+	if (d1 <= 0.0f && d2 <= 0.0f) return CPoint3d(a.x, a.y, a.z); // Vertex region A
+
+	Vec3 bp = point - b;
+	float d3 = ab.dot(bp);
+	float d4 = ac.dot(bp);
+	if (d3 >= 0.0f && d4 <= d3) return CPoint3d(b.x, b.y, b.z); // Vertex region B
+
+	float vc = d1 * d4 - d3 * d2;
+	if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
+		float v = d1 / (d1 - d3);
+		Vec3 result = Vec3{ a.x + v * ab.x, a.y + v * ab.y, a.z + v * ab.z };
+		return CPoint3d(result.x, result.y, result.z); // Edge AB
+	}
+
+	Vec3 cp = point - c;
+	float d5 = ab.dot(cp);
+	float d6 = ac.dot(cp);
+	if (d6 >= 0.0f && d5 <= d6) return CPoint3d(c.x, c.y, c.z); // Vertex region C
+
+	float vb = d5 * d2 - d1 * d6;
+	if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
+		float w = d2 / (d2 - d6);
+		Vec3 result = Vec3{ a.x + w * ac.x, a.y + w * ac.y, a.z + w * ac.z };
+		return CPoint3d(result.x, result.y, result.z); // Edge AC
+	}
+
+	float va = d3 * d6 - d5 * d4;
+	if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
+		float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+		Vec3 bc = c - b;
+		Vec3 result = Vec3{ b.x + w * bc.x, b.y + w * bc.y, b.z + w * bc.z };
+		return CPoint3d(result.x, result.y, result.z); // Edge BC
+	}
+
+	// Point inside triangle - project onto plane
+	float denom = 1.0f / (va + vb + vc);
+	float v = vb * denom;
+	float w = vc * denom;
+	Vec3 result = Vec3{
+		a.x + ab.x * v + ac.x * w,
+		a.y + ab.y * v + ac.y * w,
+		a.z + ab.z * v + ac.z * w
+	};
+	return CPoint3d(result.x, result.y, result.z);
+}
+
+
+
+std::shared_ptr<CMesh> ConcretePlugin::liczOkluzje(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist = 3.0)
+{
+	UI::STATUSBAR::setText("Building KD-tree for triangles...");
+	KDNode2* tree = KDNode2::build(zuchwa.get(), 256);
+
+	// ========== ETAP 1: Klasyfikacja wierzchołków ==========
+	UI::STATUSBAR::setText("Stage 1: Classifying vertices...");
+
+	const int num_vertices = szczeka->vertices().size();
+	UI::PROGRESSBAR::init(0, num_vertices, 0);
+	std::atomic<int> progress(0);
+
+	std::vector<double> vertex_distances(num_vertices, std::numeric_limits<double>::max());
+	std::vector<CPoint3d> vertex_closest_points(num_vertices);
+
+#pragma omp parallel for
+	for (long idx = 0; idx < num_vertices; idx++)
+	{
+		CVertex& v = szczeka->vertices()[idx];
+
+		CBoundingBox vertex_bb(
+			CPoint3d(v.x - dist * 2, v.y - dist * 2, v.z - dist * 2),
+			CPoint3d(v.x + dist * 2, v.y + dist * 2, v.z + dist * 2)
+		);
+
+		std::set<INDEX_TYPE> crossed_triangles;
+		if (tree->findCrossedBB(vertex_bb, zuchwa.get(), crossed_triangles) && !crossed_triangles.empty()) {
+			double min_dist = std::numeric_limits<double>::max();
+			CPoint3d closest_point = v;
+
+			for (INDEX_TYPE tri_idx : crossed_triangles) {
+				const CFace& face = zuchwa->faces()[tri_idx];
+				const CVertex& v0 = zuchwa->vertices()[face.A()];
+				const CVertex& v1 = zuchwa->vertices()[face.B()];
+				const CVertex& v2 = zuchwa->vertices()[face.C()];
+
+				CPoint3d proj = closestPointOnTriangle(v, v0, v1, v2);
+				double tri_dist = CVector3d(v, proj).length();
+
+				if (tri_dist < min_dist) {
+					min_dist = tri_dist;
+					closest_point = proj;
+				}
+			}
+
+			vertex_distances[idx] = min_dist;
+			vertex_closest_points[idx] = closest_point;
+		}
+
+		int current_progress = ++progress;
+		if (current_progress % std::max(1, num_vertices / 100) == 0) {
+#pragma omp critical
+			{ emit setProgressBarValue(current_progress); }
+		}
+	}
+
+	delete tree;
+	UI::PROGRESSBAR::hide();
+
+	std::shared_ptr<CMesh> okluzja = std::dynamic_pointer_cast<CMesh>(szczeka->getCopy());
+
+	// ========== ETAP 1A: Usuwanie ścianek gdzie WSZYSTKIE wierzchołki są za daleko ==========
+	UI::STATUSBAR::setText("Stage 1a: Removing distant faces...");
+
+	std::vector<CFace>& faces = okluzja->faces();
+	std::vector<bool> toErase(faces.size(), false);
+
+	const int num_faces = faces.size();
+	UI::PROGRESSBAR::init(0, num_faces, 0);
+	progress = 0;
+
+#pragma omp parallel for
+	for (int idx = 0; idx < num_faces; ++idx) {
+		CFace& f = faces[idx];
+
+		// Usuń ściankę TYLKO jeśli WSZYSTKIE 3 wierzchołki są za daleko
+		if (vertex_distances[f.A()] > dist &&
+			vertex_distances[f.B()] > dist &&
+			vertex_distances[f.C()] > dist) {
+			toErase[idx] = true;
+		}
+
+		int current_progress = ++progress;
+		if (current_progress % std::max(1, num_faces / 100) == 0) {
+#pragma omp critical
+			{ emit setProgressBarValue(current_progress); }
+		}
+	}
+
+	size_t idx = 0;
+	auto it = std::remove_if(faces.begin(), faces.end(),
+		[&toErase, &idx](const CFace&) {
+			return toErase[idx++];
+		});
+	faces.erase(it, faces.end());
+
+	UI::PROGRESSBAR::hide();
+
+	// ========== ETAP 2: Przesuwanie wystających wierzchołków ==========
+	UI::STATUSBAR::setText("Stage 2: Adjusting protruding vertices...");
+
+	// Zlicz ile ścianek używa każdego wierzchołka
+	std::vector<int> vertex_face_count(num_vertices, 0);
+	std::vector<std::vector<size_t>> vertex_to_faces(num_vertices); // Która ścianka używa danego wierzchołka
+
+	for (size_t face_idx = 0; face_idx < faces.size(); face_idx++) {
+		const CFace& f = faces[face_idx];
+		vertex_face_count[f.A()]++;
+		vertex_face_count[f.B()]++;
+		vertex_face_count[f.C()]++;
+
+		vertex_to_faces[f.A()].push_back(face_idx);
+		vertex_to_faces[f.B()].push_back(face_idx);
+		vertex_to_faces[f.C()].push_back(face_idx);
+	}
+
+	UI::PROGRESSBAR::init(0, num_vertices, 0);
+	progress = 0;
+
+	std::map<size_t, CPoint3d> vertices_to_move;
+
+	for (size_t i = 0; i < num_vertices; i++) {
+		if (vertex_face_count[i] == 0) continue; // Wierzchołek nieużywany
+
+		if (vertex_distances[i] > dist && vertex_distances[i] < dist * 1.5) {
+			CVertex& v = okluzja->vertices()[i];
+			CVector3d direction = CVector3d(v, vertex_closest_points[i]).getNormalized();
+			double move_distance = vertex_distances[i] - dist * 0.95;
+
+			if (vertex_face_count[i] <= 2) {
+				// ===== WIERZCHOŁEK NA BRZEGU =====
+				// Znajdź płaszczyznę przeciętną ścianek, do których należy wierzchołek
+				if (!vertex_to_faces[i].empty()) {
+					// Zbierz normalne wszystkich ścianek zawierających ten wierzchołek
+					CVector3d avg_normal(0, 0, 0);
+
+					for (size_t face_idx : vertex_to_faces[i]) {
+						const CFace& f = faces[face_idx];
+						const CVertex& v0 = okluzja->vertices()[f.A()];
+						const CVertex& v1 = okluzja->vertices()[f.B()];
+						const CVertex& v2 = okluzja->vertices()[f.C()];
+
+						CVector3d edge1 = CVector3d(v0, v1);
+						CVector3d edge2 = CVector3d(v0, v2);
+						CVector3d face_normal = edge1.crossProduct(edge2).getNormalized();
+
+						avg_normal += face_normal;
+					}
+
+					avg_normal = avg_normal.getNormalized();
+
+					// Projekcja kierunku ruchu na płaszczyznę przeciętną ścianek
+					// (usuwamy składową normalną do powierzchni)
+					double normal_component = direction.dotProduct(avg_normal);
+					CVector3d tangent_direction = direction - (avg_normal * normal_component);
+
+					if (tangent_direction.length() > 0.01) {
+						tangent_direction = tangent_direction.getNormalized();
+						CPoint3d new_pos = v + tangent_direction * move_distance;
+						vertices_to_move[i] = new_pos;
+					}
+					else {
+						// Jeśli kierunek ruchu jest prostopadły do powierzchni, nie przesuwaj
+						// (lub przesuń minimalnie wzdłuż krawędzi)
+					}
+				}
+			}
+			else {
+				// ===== WIERZCHOŁEK WEWNĘTRZNY =====
+				// Dla wierzchołków wewnętrznych też stosujemy projekcję na powierzchnię lokalną
+				if (!vertex_to_faces[i].empty()) {
+					CVector3d avg_normal(0, 0, 0);
+
+					for (size_t face_idx : vertex_to_faces[i]) {
+						const CFace& f = faces[face_idx];
+						const CVertex& v0 = okluzja->vertices()[f.A()];
+						const CVertex& v1 = okluzja->vertices()[f.B()];
+						const CVertex& v2 = okluzja->vertices()[f.C()];
+
+						CVector3d edge1 = CVector3d(v0, v1);
+						CVector3d edge2 = CVector3d(v0, v2);
+						CVector3d face_normal = edge1.crossProduct(edge2).getNormalized();
+
+						avg_normal += face_normal;
+					}
+
+					avg_normal = avg_normal.getNormalized();
+
+					// Projekcja kierunku ruchu na płaszczyznę lokalną
+					double normal_component = direction.dotProduct(avg_normal);
+					CVector3d tangent_direction = direction - (avg_normal * normal_component);
+
+					if (tangent_direction.length() > 0.01) {
+						tangent_direction = tangent_direction.getNormalized();
+						CPoint3d new_pos = v + tangent_direction * move_distance;
+						vertices_to_move[i] = new_pos;
+					}
+				}
+			}
+		}
+
+		if (i % std::max(1, num_vertices / 100) == 0) {
+			emit setProgressBarValue(i);
+		}
+	}
+
+	// Zastosuj przesunięcia
+	for (const auto& [vertex_idx, new_pos] : vertices_to_move) {
+		okluzja->vertices()[vertex_idx] = new_pos;
+	}
+
+	/* // Opcjonalnie: Laplacian smoothing na przesuniętych wierzchołkach
+	for (int iter = 0; iter < 3; iter++) { // 3 iteracje wygładzania
+		for (size_t i = 0; i < num_vertices; i++) {
+			if (vertex_face_count[i] <= 2 && vertex_face_count[i] > 0) {
+				// Uśrednij pozycję z sąsiadami
+				CPoint3d avg_pos(0, 0, 0);
+				int neighbor_count = 0;
+
+				for (size_t face_idx : vertex_to_faces[i]) {
+					const CFace& f = faces[face_idx];
+					if (f.A() != i) { avg_pos += okluzja->vertices()[f.A()]; neighbor_count++; }
+					if (f.B() != i) { avg_pos += okluzja->vertices()[f.B()]; neighbor_count++; }
+					if (f.C() != i) { avg_pos += okluzja->vertices()[f.C()]; neighbor_count++; }
+				}
+
+				if (neighbor_count > 0) {
+					avg_pos *= (1.0 / neighbor_count);
+					okluzja->vertices()[i] = okluzja->vertices()[i] * 0.7 + avg_pos * 0.3; // 30% wygładzania
+				}
+			}
+		}
+	}
+	// koniec Laplacian smoothing */
+
+	okluzja->removeUnusedVertices();
+
+	UI::PROGRESSBAR::hide();
+	UI::STATUSBAR::setText("Ready!");
+
+	return okluzja;
+}
+
 
 std::shared_ptr<CMesh> meshWithKeyword(QString keyword, CObject::Children kids)
 {
@@ -192,7 +606,7 @@ std::shared_ptr<CMesh> meshWithKeywordInLabel(QString keyword, CObject::Children
 void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 {
 	QString fileName = QDir::toNativeSeparators(
-		QFileDialog::getOpenFileName( 0, QString::fromUtf8("Select upper jaw file"), AppSettings::mainSettings()->value("recentFile").toString(), CFileConnector::getLoadExts())
+		QFileDialog::getOpenFileName( 0, QString::fromUtf8("Select upper jaw file"), appApi().settings().value("recentFile").toString(), CFileConnector::getLoadExts())
 	);
 
 	if (!fileName.isEmpty() && QFileInfo(fileName).exists()) {
@@ -204,7 +618,7 @@ void ConcretePlugin::wczytaj_spreparowany_ATMDL()
 		}
 
 		if (obj->hasChildren()) {
-			AppSettings::mainSettings()->setValue("recentFile", fileName);
+			appApi().settings().setValue("recentFile", fileName);
 		}
 
 		UI::updateAllViews();
@@ -357,6 +771,157 @@ void ConcretePlugin::etap00(double dist2, bool dane_z_pomiaru)
 }
 
 
+std::pair<Eigen::Matrix4d, Eigen::Matrix4d> getTransformationMatrices(std::shared_ptr<CBaseObject> obj, std::string stop)
+{
+	Eigen::Matrix4d rootToStop = Eigen::Matrix4d::Identity();
+	Eigen::Matrix4d stopToObj = Eigen::Matrix4d::Identity();
+
+	if (!obj) return { rootToStop, stopToObj };
+
+	QString stopQ = QString::fromStdString(stop);
+
+	// Zbierz węzły od obiektu w górę aż do (ale NIE włączając) stop
+	std::vector<std::shared_ptr<CBaseObject>> below;
+	std::shared_ptr<CBaseObject> cur = obj;
+	while (cur && cur->getLabel().compare(stopQ, Qt::CaseInsensitive) != 0) {
+		below.push_back(cur);
+		cur = cur->getParentPtr();
+	}
+
+	// 'cur' jest teraz albo węzłem o label==stop, albo nullptr
+	// Zbierz węzły od stop w górę (włącznie)
+	std::vector<std::shared_ptr<CBaseObject>> above;
+	while (cur) {
+		above.push_back(cur);
+		cur = cur->getParentPtr();
+	}
+
+	// stop -> obj: mnożymy od dołu (obj) do góry (bez stop)
+	for (size_t i = 0; i < below.size(); ++i) {
+		auto n = below[i];
+		if (n->hasTransformation()) {
+			stopToObj = n->getTransformationMatrix() * stopToObj;
+		}
+	}
+
+	// root -> stop: mnożymy od stop w górę, ale kolejność mnożenia daje finalnie root..stop
+	for (size_t i = 0; i < above.size(); ++i) {
+		auto n = above[i];
+		if (n->hasTransformation()) {
+			rootToStop = n->getTransformationMatrix() * rootToStop;
+		}
+	}
+
+	return { rootToStop, stopToObj };
+}
+
+std::pair<Eigen::Matrix4d, Eigen::Matrix4d> makeReversedOrderMatrices(
+	const Eigen::Matrix4d& rootToStop,
+	const Eigen::Matrix4d& stopToObj)
+{
+	Eigen::Matrix4d rootToStop1 = rootToStop;
+	Eigen::Matrix4d stopToObj1 = stopToObj;
+
+	// Spróbuj odwrócić stopToObj; sprawdź numeryczną odwracalność
+	const double eps = 1e-12;
+	Eigen::FullPivLU<Eigen::Matrix4d> lu(stopToObj);
+	if (!lu.isInvertible()) {
+		// fallback: nie da się odwrócić - zwracamy oryginały (bez transformacji)
+		return { rootToStop1, stopToObj1 };
+	}
+
+	Eigen::Matrix4d stopToObjInv = stopToObj.inverse();
+
+	// koniugacja: rootToStop1 = S^{-1} * R * S
+	rootToStop1 = stopToObjInv * rootToStop * stopToObj;
+
+	return { rootToStop1, stopToObj1 };
+}
+
+void ConcretePlugin::etap00ag(double dist2, bool dane_z_pomiaru)
+{
+	QCursor c = moj_widget->cursor();
+	c.setShape(Qt::CursorShape::WaitCursor);
+	moj_widget->setCursor(c);
+
+	std::shared_ptr<CMesh> sz1 = std::dynamic_pointer_cast<CMesh>(szcz->getCopy());
+	std::shared_ptr<CMesh> zu1 = std::dynamic_pointer_cast<CMesh>(zuch->getCopy());
+
+	Eigen::Matrix4d mSz = CBaseObject::getGlobalTransformationMatrix(szcz);
+	auto [mZuR, mZu] = getTransformationMatrices(zuch, "transformation");
+
+	auto [mZuR1, mZu1] = makeReversedOrderMatrices(mZuR, mZu);
+
+	CTransform nullT;
+	CTransform tSz(mSz);
+	CTransform tZu(mZu);
+	CTransform tZuR1(mZuR1);
+	CTransform tZuR(mZuR);
+	CTransform tZuRinv(mZuR.inverse());
+
+	auto nowymodelSz = std::make_shared<CModel3D>();
+	nowymodelSz->setLabel("Szczeka_global");
+	nowymodelSz->setTransform(tSz);
+	AP::WORKSPACE::addObject(nowymodelSz);
+	AP::OBJECT::addChild(nowymodelSz, sz1);
+	nowymodelSz->applyTransform();
+
+
+	auto nowymodelZu = std::make_shared<CModel3D>();
+	nowymodelZu->setLabel("Zuchwa_global");
+	nowymodelZu->setTransform(tZu);
+	AP::WORKSPACE::addObject(nowymodelZu);
+	AP::OBJECT::addChild(nowymodelZu, zu1);
+	nowymodelZu->applyTransform();
+
+	auto nowymodelZu2 = std::make_shared<CModel3D>();
+	nowymodelZu2->setLabel("*transformation");
+	nowymodelZu2->setTransform(tZuR);
+	AP::OBJECT::addChild(nowymodelSz, nowymodelZu2);
+	//AP::OBJECT::addChild(nowymodelZu2, zu1);
+
+
+
+	oklu = liczOkluzje(sz1, zu1, dist2);
+
+	oklu->setLabel(QString("okluzja: %1mm").arg(dist2));
+	oklu->calcFN();
+
+	AP::OBJECT::addChild(nowymodelZu2, oklu);
+
+	auto nowymodelZu3 = std::make_shared<CModel3D>();
+	nowymodelZu3->setLabel("*transformation_inv");
+	nowymodelZu3->setTransform(tZuR);
+	AP::OBJECT::addChild(nowymodelSz, nowymodelZu3);
+	AP::OBJECT::addChild(nowymodelZu3, zu1);
+	//AP::OBJECT::addChild(nowymodelZu3, oklu);
+	nowymodelZu3->applyTransform();
+	nowymodelZu3->setTransform(tZuRinv);
+
+
+	AP::WORKSPACE::removeModel(nowymodelZu);
+
+
+
+	szcz = sz1;
+	szcz_parent = std::dynamic_pointer_cast<CModel3D>(szcz->getParentPtr());
+	zuch = zu1;
+
+	moj_widget->wybor_siatek->ustawSzczeke(szcz->getLabel());
+	moj_widget->wybor_siatek->ustawZuchwe(zuch->getLabel());
+	moj_widget->wybor_siatek->ustawOkluzje(oklu->getLabel());
+
+	//ustawiam pion w osi Z
+	nowymodelSz->transform().rotateAroundAxisDeg(CVector3d::XAxis(), 90.0);
+
+
+	c.setShape(Qt::CursorShape::ArrowCursor);
+	moj_widget->setCursor(c);
+
+	UI::updateAllViews();
+}
+
+
 void ConcretePlugin::etap01(int div)
 {
 	if (oklu == nullptr || szcz == nullptr)
@@ -403,16 +968,31 @@ void ConcretePlugin::etap01(int div)
 	if (m_cutPlane == nullptr) {
 		m_cutPlane = std::make_shared<CAnnotationPlane>();
 		m_cutPlane->setSize(80.0);
-		m_cutPlane->setLabel(L"plaszczyzna ciecia");
+		m_cutPlane->setLabel(L"cutting plane");
 		m_cutPlane->setColor(CRGBA(1.0f, 0.8f, 0.3f, 0.7f));
 
 		m_cutPlane->setCenter(bb.getMidpoint());
 
-		CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka_okluzja->getData())->getMainNormalVector();
+		CVector3d n2 = oklu->getMainNormalVector(true);
+		//CVector3d n2 = std::dynamic_pointer_cast<CMesh>(symulator->szczeka_okluzja->getData())->getMainNormalVector(true);
 		n2.x = 0.0;
 		n2.y = 0.0;
 
 		m_cutPlane->setNormal(n2);
+
+		if (testyAG) {
+			//tymczasowe - testowe ustawienie płaszczyzny ciecia
+			m_cutPlane->setCenter(CPoint3d(-4.7, -54.5, -39.0));
+			m_cutPlane->setNormal(CVector3d(-0.030508, 0.347240, -0.937280).getNormalized());
+
+			//m_projectionPlane = std::make_shared<CAnnotationPlane>(m_cutPlane->getCenter(), m_cutPlane->getNormal());
+			//m_projectionPlane->setCenter(CPoint3d(-4.715613, -54.49725, -37.67131));
+			//m_projectionPlane->setNormal(CVector3d(-0.026998, 0.485099, -0.874042).getNormalized());
+
+			//m_projectionPlane->setSize(80);
+			//m_projectionPlane->setLabel(L"projection plane");
+			//AP::MODEL::addAnnotation(symulator->szczeka_obj, m_projectionPlane);
+		}
 	}
 
 	AP::MODEL::addAnnotation(symulator->szczeka_obj, m_cutPlane);
@@ -491,12 +1071,19 @@ void ConcretePlugin::etap11()
 
 	AP::WORKSPACE::addModel(symulator->wnetrze->obj);
 
-	m_plaszczyzna_rzutowania = std::make_shared<CAnnotationPlane>(CPoint3d(0,0,0), CVector3d(0,0,1));
-	m_plaszczyzna_rzutowania->setSize(80);
+	if (m_projectionPlane == nullptr) {
+		m_projectionPlane = std::make_shared<CAnnotationPlane>(m_cutPlane->getCenter(), m_cutPlane->getNormal());
+		m_projectionPlane->setSize(80);
 
-	AP::OBJECT::addChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
+		if (testyAG) {
+			//tymczasowe - testowe ustawienie płaszczyzny projekcji
+			m_projectionPlane->setCenter(CPoint3d(10.0, 0.0, -20.0));
+		}
+
+		AP::OBJECT::addChild(symulator->wnetrze->obj, m_projectionPlane);
+	}
 	
-	symulator->wnetrze->obj->transform().fromQMatrix4x4(planeToTransform(m_cutPlane->getNormal()));
+	symulator->wnetrze->obj->transform().fromQMatrix4x4(planeToTransform(m_projectionPlane->getNormal()));
 	symulator->wnetrze->obj->transform().translate(CVector3d(CPoint3d(0),m_cutPlane->getCenter()));
 	
 	UI::updateAllViews();
@@ -512,6 +1099,421 @@ void ConcretePlugin::etap11()
 	moj_widget->setCursor(c);
 }
 
+
+//
+//// Funkcja oblicza aspect ratio trójkąta (stosunek najdłuższej krawędzi do wysokości)
+//float calculateAspectRatio(const CVertex& v0, const CVertex& v1, const CVertex& v2) {
+//	CVector3d e0 = CVector3d(v0, v1);
+//	CVector3d e1 = CVector3d(v1, v2);
+//	CVector3d e2 = CVector3d(v2, v0);
+//
+//	float len0 = e0.length();
+//	float len1 = e1.length();
+//	float len2 = e2.length();
+//
+//	float longest = std::max({ len0, len1, len2 });
+//	float perimeter = len0 + len1 + len2;
+//
+//	// Pole trójkąta za pomocą wzoru Herona
+//	float s = perimeter / 2.0f;
+//	float area = std::sqrt(s * (s - len0) * (s - len1) * (s - len2));
+//
+//	if (area < 1e-6f) return 1000.0f; // Zdegenerowany trójkąt
+//
+//	// Wysokość z najdłuższej krawędzi
+//	float height = 2.0f * area / longest;
+//
+//	return longest / height; // Aspect ratio
+//}
+//
+//// Funkcja dzieli wąskie trójkąty na mniejsze przez podział najdłuższej krawędzi
+//void subdivideNarrowFaces(std::shared_ptr<CMesh> mesh, float aspectRatioThreshold = 5.0f, int maxIterations = 3) {
+//	if (!mesh) return;
+//
+//	UI::STATUSBAR::setText("Subdividing narrow faces...");
+//	qInfo() << "=== SUBDIVIDE NARROW FACES: START ===";
+//	qInfo() << "Initial faces:" << mesh->faces().size() << ", vertices:" << mesh->vertices().size();
+//	qInfo() << "Aspect ratio threshold:" << aspectRatioThreshold;
+//
+//	for (int iteration = 0; iteration < maxIterations; iteration++) {
+//		qInfo() << "Iteration" << (iteration + 1) << "/" << maxIterations;
+//
+//		std::vector<CFace>& faces = mesh->faces();
+//		std::vector<CVertex>& vertices = mesh->vertices();
+//
+//		// Mapa: krawędź -> nowy wierzchołek (aby uniknąć duplikacji)
+//		std::map<std::pair<INDEX_TYPE, INDEX_TYPE>, INDEX_TYPE> edgeMidpoints;
+//
+//		std::vector<CFace> newFaces;
+//		newFaces.reserve(faces.size() * 2); // Rezerwujemy miejsce
+//
+//		int subdivided = 0;
+//
+//		for (size_t i = 0; i < faces.size(); i++) {
+//			const CFace& f = faces[i];
+//			const CVertex& v0 = vertices[f.A()];
+//			const CVertex& v1 = vertices[f.B()];
+//			const CVertex& v2 = vertices[f.C()];
+//
+//			float aspectRatio = calculateAspectRatio(v0, v1, v2);
+//
+//			if (aspectRatio > aspectRatioThreshold) {
+//				subdivided++;
+//
+//				// Znajdź najdłuższą krawędź
+//				CVector3d e0 = CVector3d(v0, v1);
+//				CVector3d e1 = CVector3d(v1, v2);
+//				CVector3d e2 = CVector3d(v2, v0);
+//
+//				float len0 = e0.length();
+//				float len1 = e1.length();
+//				float len2 = e2.length();
+//
+//				INDEX_TYPE A = f.A(), B = f.B(), C = f.C();
+//				INDEX_TYPE midIdx;
+//
+//				if (len0 >= len1 && len0 >= len2) {
+//					// Podziel krawędź A-B
+//					auto edge = std::minmax(A, B);
+//					auto it = edgeMidpoints.find(edge);
+//
+//					if (it != edgeMidpoints.end()) {
+//						midIdx = it->second;
+//					}
+//					else {
+//						CVertex mid;
+//						mid.x = (v0.x + v1.x) / 2.0f;
+//						mid.y = (v0.y + v1.y) / 2.0f;
+//						mid.z = (v0.z + v1.z) / 2.0f;
+//
+//						midIdx = vertices.size();
+//						vertices.push_back(mid);
+//						edgeMidpoints[edge] = midIdx;
+//					}
+//
+//					// Utwórz dwa nowe trójkąty: (A, mid, C) i (mid, B, C)
+//					newFaces.emplace_back(A, midIdx, C);
+//					newFaces.emplace_back(midIdx, B, C);
+//
+//				}
+//				else if (len1 >= len0 && len1 >= len2) {
+//					// Podziel krawędź B-C
+//					auto edge = std::minmax(B, C);
+//					auto it = edgeMidpoints.find(edge);
+//
+//					if (it != edgeMidpoints.end()) {
+//						midIdx = it->second;
+//					}
+//					else {
+//						CVertex mid;
+//						mid.x = (v1.x + v2.x) / 2.0f;
+//						mid.y = (v1.y + v2.y) / 2.0f;
+//						mid.z = (v1.z + v2.z) / 2.0f;
+//
+//						midIdx = vertices.size();
+//						vertices.push_back(mid);
+//						edgeMidpoints[edge] = midIdx;
+//					}
+//
+//					newFaces.emplace_back(B, midIdx, A);
+//					newFaces.emplace_back(midIdx, C, A);
+//
+//				}
+//				else {
+//					// Podziel krawędź C-A
+//					auto edge = std::minmax(C, A);
+//					auto it = edgeMidpoints.find(edge);
+//
+//					if (it != edgeMidpoints.end()) {
+//						midIdx = it->second;
+//					}
+//					else {
+//						CVertex mid;
+//						mid.x = (v2.x + v0.x) / 2.0f;
+//						mid.y = (v2.y + v0.y) / 2.0f;
+//						mid.z = (v2.z + v0.z) / 2.0f;
+//
+//						midIdx = vertices.size();
+//						vertices.push_back(mid);
+//						edgeMidpoints[edge] = midIdx;
+//					}
+//
+//					newFaces.emplace_back(C, midIdx, B);
+//					newFaces.emplace_back(midIdx, A, B);
+//				}
+//			}
+//			else {
+//				// Zachowaj oryginalny trójkąt
+//				newFaces.push_back(f);
+//			}
+//		}
+//
+//		qInfo() << "Subdivided" << subdivided << "faces";
+//		qInfo() << "New faces:" << newFaces.size() << ", vertices:" << vertices.size();
+//
+//		faces = std::move(newFaces);
+//
+//		if (subdivided == 0) {
+//			qInfo() << "No more narrow faces found, stopping early";
+//			break;
+//		}
+//	}
+//
+//	mesh->removeDuplicateVertices();
+//
+//	qInfo() << "Final faces:" << mesh->faces().size() << ", vertices:" << mesh->vertices().size();
+//	qInfo() << "=== SUBDIVIDE NARROW FACES: END ===";
+//	UI::STATUSBAR::setText("Subdivision complete");
+//}
+
+//// Funkcja oblicza aspect ratio trójkąta (stosunek najdłuższej krawędzi do wysokości)
+//float calculateAspectRatio(const CVertex& v0, const CVertex& v1, const CVertex& v2) {
+//	CVector3d e0 = CVector3d(v0, v1);
+//	CVector3d e1 = CVector3d(v1, v2);
+//	CVector3d e2 = CVector3d(v2, v0);
+//
+//	float len0 = e0.length();
+//	float len1 = e1.length();
+//	float len2 = e2.length();
+//
+//	float longest = std::max({ len0, len1, len2 });
+//	float perimeter = len0 + len1 + len2;
+//
+//	// Pole trójkąta za pomocą wzoru Herona
+//	float s = perimeter / 2.0f;
+//	float area = std::sqrt(s * (s - len0) * (s - len1) * (s - len2));
+//
+//	if (area < 1e-6f) return 1000.0f; // Zdegenerowany trójkąt
+//
+//	// Wysokość z najdłuższej krawędzi
+//	float height = 2.0f * area / longest;
+//
+//	return longest / height; // Aspect ratio
+//}
+
+//// KLUCZOWA FUNKCJA: Hash dla krawędzi (aby środkowe wierzchołki były wspólne)
+//struct EdgeHasher {
+//	std::size_t operator()(const std::pair<INDEX_TYPE, INDEX_TYPE>& edge) const {
+//		// Zawsze sortuj, aby (A,B) i (B,A) dawały ten sam hash
+//		INDEX_TYPE a = std::min(edge.first, edge.second);
+//		INDEX_TYPE b = std::max(edge.first, edge.second);
+//		return std::hash<INDEX_TYPE>()(a) ^ (std::hash<INDEX_TYPE>()(b) << 1);
+//	}
+//};
+//
+//
+//
+//
+//
+//#include <unordered_set>
+//
+//
+//void subdivideNarrowFaces(std::shared_ptr<CMesh> mesh,
+//	float aspectRatioThreshold = 5.0f,
+//	int maxIterations = 3)
+//{
+//	if (!mesh) return;
+//
+//	using Edge = std::pair<INDEX_TYPE, INDEX_TYPE>;
+//
+//	UI::STATUSBAR::setText("Subdividing narrow faces...");
+//	qInfo() << "=== SUBDIVIDE NARROW FACES: START ===";
+//	qInfo() << "Initial faces:" << mesh->faces().size()
+//		<< ", vertices:" << mesh->vertices().size();
+//	qInfo() << "Aspect ratio threshold:" << aspectRatioThreshold;
+//
+//	for (int iteration = 0; iteration < maxIterations; ++iteration) {
+//		qInfo() << "Iteration" << (iteration + 1) << "/" << maxIterations;
+//
+//		std::vector<CFace>& faces = mesh->faces();
+//		std::vector<CVertex>& verts = mesh->vertices();
+//
+//		const size_t faceCount = faces.size();
+//		if (faceCount == 0) break;
+//
+//		// 1) Wyznaczamy zbiór krawędzi do podziału (edge-based)
+//		std::unordered_set<Edge, EdgeHasher> edgesToSplit;
+//		edgesToSplit.reserve(faceCount * 2);
+//
+//		for (INDEX_TYPE i = 0; i < static_cast<INDEX_TYPE>(faceCount); ++i) {
+//			const CFace& f = faces[i];
+//			const CVertex& v0 = verts[f.A()];
+//			const CVertex& v1 = verts[f.B()];
+//			const CVertex& v2 = verts[f.C()];
+//
+//			float aspect = calculateAspectRatio(v0, v1, v2);
+//			if (aspect <= aspectRatioThreshold)
+//				continue;
+//
+//			CVector3d e0(v0, v1), e1(v1, v2), e2(v2, v0);
+//			float len0 = e0.length();
+//			float len1 = e1.length();
+//			float len2 = e2.length();
+//
+//			Edge eAB = std::minmax(f.A(), f.B());
+//			Edge eBC = std::minmax(f.B(), f.C());
+//			Edge eCA = std::minmax(f.C(), f.A());
+//
+//			// Sortuj krawędzie wg długości (malejąco)
+//			std::vector<std::pair<float, Edge>> sortedEdges = {
+//				{len0, eAB}, {len1, eBC}, {len2, eCA}
+//			};
+//			std::sort(sortedEdges.begin(), sortedEdges.end(),
+//				[](const auto& a, const auto& b) {
+//					return a.first > b.first;
+//				});
+//
+//			float longest = sortedEdges[0].first;
+//			float secondLongest = sortedEdges[1].first;
+//			float shortest = sortedEdges[2].first;
+//
+//			// Jeśli 2 długie krawędzie (różnica > 50%), oznacz obie
+//			if (secondLongest > shortest * 1.5f) {
+//				edgesToSplit.insert(sortedEdges[0].second);
+//				edgesToSplit.insert(sortedEdges[1].second);
+//			}
+//			else {
+//				edgesToSplit.insert(sortedEdges[0].second);
+//			}
+//		}
+//
+//		if (edgesToSplit.empty()) {
+//			qInfo() << "No narrow faces above threshold, stopping early.";
+//			break;
+//		}
+//
+//		qInfo() << "Edges to split:" << edgesToSplit.size();
+//
+//		// 2) Właściwa subdivizja
+//		std::unordered_map<Edge, INDEX_TYPE, EdgeHasher> edgeMidpoints;
+//		edgeMidpoints.reserve(edgesToSplit.size());
+//
+//		std::vector<CFace> newFaces;
+//		newFaces.reserve(faceCount * 2);
+//
+//		auto getMidpoint = [&](const Edge& e, INDEX_TYPE i0, INDEX_TYPE i1) -> INDEX_TYPE {
+//			auto it = edgeMidpoints.find(e);
+//			if (it != edgeMidpoints.end())
+//				return it->second;
+//
+//			const CVertex& a = verts[i0];
+//			const CVertex& b = verts[i1];
+//
+//			CVertex mid;
+//			mid.x = (a.x + b.x) * 0.5f;
+//			mid.y = (a.y + b.y) * 0.5f;
+//			mid.z = (a.z + b.z) * 0.5f;
+//
+//			INDEX_TYPE midIdx = static_cast<INDEX_TYPE>(verts.size());
+//			verts.push_back(mid);
+//			edgeMidpoints[e] = midIdx;
+//			return midIdx;
+//			};
+//
+//		int subdivided = 0;
+//		int count1 = 0, count2 = 0, count3 = 0; // Statystyki
+//
+//		for (INDEX_TYPE i = 0; i < static_cast<INDEX_TYPE>(faceCount); ++i) {
+//			const CFace& f = faces[i];
+//
+//			INDEX_TYPE A = f.A();
+//			INDEX_TYPE B = f.B();
+//			INDEX_TYPE C = f.C();
+//
+//			Edge eAB = std::minmax(A, B);
+//			Edge eBC = std::minmax(B, C);
+//			Edge eCA = std::minmax(C, A);
+//
+//			bool splitAB = edgesToSplit.count(eAB) > 0;
+//			bool splitBC = edgesToSplit.count(eBC) > 0;
+//			bool splitCA = edgesToSplit.count(eCA) > 0;
+//
+//			int splitCount = (splitAB ? 1 : 0) + (splitBC ? 1 : 0) + (splitCA ? 1 : 0);
+//
+//			if (splitCount == 0) {
+//				newFaces.push_back(f);
+//				continue;
+//			}
+//
+//			subdivided++;
+//
+//			if (splitCount == 1) {
+//				count1++;
+//				if (splitAB) {
+//					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+//					newFaces.emplace_back(A, mAB, C);
+//					newFaces.emplace_back(mAB, B, C);
+//				}
+//				else if (splitBC) {
+//					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+//					newFaces.emplace_back(B, mBC, A);
+//					newFaces.emplace_back(mBC, C, A);
+//				}
+//				else {
+//					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+//					newFaces.emplace_back(C, mCA, B);
+//					newFaces.emplace_back(mCA, A, B);
+//				}
+//
+//			}
+//			else if (splitCount == 2) {
+//				count2++;
+//				if (splitAB && splitBC) {
+//					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+//					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+//					newFaces.emplace_back(A, mAB, C);
+//					newFaces.emplace_back(mAB, mBC, C);
+//					newFaces.emplace_back(mAB, B, mBC);
+//
+//				}
+//				else if (splitBC && splitCA) {
+//					INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+//					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+//					newFaces.emplace_back(B, mBC, A);
+//					newFaces.emplace_back(mBC, mCA, A);
+//					newFaces.emplace_back(mBC, C, mCA);
+//
+//				}
+//				else {
+//					INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+//					INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+//					newFaces.emplace_back(C, mCA, B);
+//					newFaces.emplace_back(mCA, mAB, B);
+//					newFaces.emplace_back(mCA, A, mAB);
+//				}
+//
+//			}
+//			else {
+//				count3++;
+//				INDEX_TYPE mAB = getMidpoint(eAB, A, B);
+//				INDEX_TYPE mBC = getMidpoint(eBC, B, C);
+//				INDEX_TYPE mCA = getMidpoint(eCA, C, A);
+//
+//				newFaces.emplace_back(A, mAB, mCA);
+//				newFaces.emplace_back(B, mBC, mAB);
+//				newFaces.emplace_back(C, mCA, mBC);
+//				newFaces.emplace_back(mAB, mBC, mCA);
+//			}
+//		}
+//
+//		qInfo() << "Subdivided:" << subdivided
+//			<< " (1-edge:" << count1 << ", 2-edge:" << count2 << ", 3-edge:" << count3 << ")"
+//			<< ", New faces:" << newFaces.size()
+//			<< ", Vertices:" << verts.size();
+//
+//		faces = std::move(newFaces);
+//
+//		if (subdivided == 0) break;
+//	}
+//
+//	qInfo() << "Final faces:" << mesh->faces().size()
+//		<< ", vertices:" << mesh->vertices().size();
+//	qInfo() << "=== SUBDIVIDE NARROW FACES: END ===";
+//	UI::STATUSBAR::setText("Subdivision complete");
+//}
+//
+
+
 void ConcretePlugin::etap123(double dValIn, double dValOut)
 {
 	moj_widget->etap123->setDisabled(true);
@@ -523,6 +1525,7 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 	qInfo() << "etap12 -> symulator->generujWnetrzeNEW()";
 
 	symulator->create_inner_surface(symulator->wnetrze, dValIn);
+
 	mesh_wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
 
 
@@ -545,9 +1548,22 @@ void ConcretePlugin::etap123(double dValIn, double dValOut)
 
 	UI::DOCK::WORKSPACE::update();
 
-	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_plaszczyzna_rzutowania);
+	AP::OBJECT::removeChild(symulator->wnetrze->obj, m_projectionPlane);
 
-	etap14();
+	// selektywne usuwanie zerowych ścianek z wnętrza
+	// (wierzch już ma usunięte skrajne ścianki dzięki usunSkrajneScianki())
+	qInfo() << "Selektywne usuwanie zerowych scianek z wnetrza...";
+	symulator->usunNiepasujaceZeroweSciankiWnetrza();
+
+
+	// ========== SUBDIVIDE NARROW FACES - WNETRZE ==========
+	//subdivideNarrowFaces(mesh_wnetrze, 5.0f, 2);
+
+	// ========== SUBDIVIDE NARROW FACES - WIERZCH ==========
+	//subdivideNarrowFaces(mesh_wierzch, 5.0f, 10);
+
+
+	etap14_nowy();
 
 	wytlaczanie();
 
@@ -593,7 +1609,7 @@ void ConcretePlugin::reset_plugin()
 	symulator = nullptr;
 
 	m_cutPlane = nullptr;
-	m_plaszczyzna_rzutowania = nullptr;
+	m_projectionPlane = nullptr;
 
 	m_divider = 10;
 
@@ -606,7 +1622,7 @@ void ConcretePlugin::wytlaczanie()
 {
 	CObject::Children kids;
 
-	for (const auto& kid : CWorkspace::instance()->children())
+	for (const auto& kid : appApi().workspace().children())
 	{
 		kids[kid.first] = kid.second;
 	}
@@ -682,16 +1698,25 @@ void ConcretePlugin::wytlaczanie()
 	auto stmp = stampFromMesh(ok);
 
 	UI::STATUSBAR::setText("Impressing an occlusal stamp on the outer surface of the splint");
+	qInfo() << "Impressing an occlusal stamp on the outer surface of the splint";
 
 	zrobOdciskStempla(wi, stmp, 0.0);
 
 	UI::STATUSBAR::setText("Imprinting the lower jaw on the outer surface of the splint");
+	qInfo() << "Imprinting the lower jaw on the outer surface of the splint";
 
 	zrobOdciskStempla(wi, zu, 0.2);
 
 	UI::STATUSBAR::setText("Making holes at intersections");
+	qInfo() << "Making holes at intersections" << endl;
+
+	//return;
+
+
+	//subdivideNarrowFaces(mesh_wierzch, 5.0f, 10);
 
 	auto [wi2, wn2] = zrobDziury(wi, wn);
+
 
 	UI::STATUSBAR::setText("Bridging the outer and inner surfaces");
 
@@ -700,6 +1725,11 @@ void ConcretePlugin::wytlaczanie()
 		UI::STATUSBAR::setText("Filling holes in the surface");
 
 		if (auto filled = filling(bridged)) {
+
+			//szyna gotowa - sprzątanie
+			MeshTools::repairMesh(*filled.get());
+			MeshTools::subdivideNarrowFaces(filled, 5.0f, 5);
+
 			filled->setLabel("szyna");
 			CWorkspace::instance()->_objectAdd(filled);
 			filled->getParentPtr()->setLabel("szyna");
@@ -727,8 +1757,8 @@ void decapitation(std::shared_ptr<CBaseObject> victim, std::shared_ptr<CAnnotati
 
 	CPlane p = *guillotine;
 
-	CPoint3d p1 = p.m_center;
-	CPoint3d p2 = p1 + p.m_normal;
+	CPoint3d p1 = p.getCenter();
+	CPoint3d p2 = p1 + p.getNormal();
 
 	Eigen::Matrix4d T0 = CBaseObject::getGlobalTransformationMatrix(guillotine);
 
@@ -741,8 +1771,8 @@ void decapitation(std::shared_ptr<CBaseObject> victim, std::shared_ptr<CAnnotati
 	p1 = T1inv * p1; // do wsp. szczeka_obj
 	p2 = T1inv * p2;
 
-	p.m_center = p1;
-	p.m_normal = CVector3d(p1, p2).getNormalized();
+	p.setCenter(p1);
+	p.setNormal(CVector3d(p1, p2).getNormalized());
 
 
 	if ((victim->hasType(CObject::CLOUD)) || (victim->hasType(CObject::ORDEREDCLOUD)))
@@ -808,6 +1838,30 @@ void ConcretePlugin::etap14()
 }
 
 
+void ConcretePlugin::etap14_nowy()
+{
+	//symulator->wierzch->obj->applyTransform();
+
+	//std::shared_ptr<CMesh> wierzch = std::dynamic_pointer_cast<CMesh>(symulator->wierzch->obj->getChild());
+
+	//decapitation(wierzch, m_cutPlane);
+
+	////----------------------------------------------------------------
+
+	//symulator->wnetrze->obj->applyTransform();
+
+	//std::shared_ptr<CMesh> wnetrze = std::dynamic_pointer_cast<CMesh>(symulator->wnetrze->obj->getChild());
+
+	//decapitation(wnetrze, m_cutPlane);
+
+	//----------------------------------------------------------------
+
+	AP::OBJECT::removeChild(symulator->szczeka_obj, m_cutPlane);
+
+	UI::DOCK::WORKSPACE::update();
+}
+
+
 void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 {
 	Eigen::Matrix4d M = CBaseObject::getGlobalTransformationMatrix(m);
@@ -834,12 +1888,9 @@ void save_mesh(std::shared_ptr<CMesh>  m, QString label, QString path)
 
 
 
-
-
-
 void ConcretePlugin::save_all()
 {
-	QFileInfo fi(AppSettings::mainSettings()->value("recentFile").toString());
+	QFileInfo fi(appApi().settings().value("recentFile").toString());
 
 	QString init_path = QString("%1/szyna.obj").arg(fi.absoluteDir().absolutePath());
 
@@ -855,7 +1906,7 @@ void ConcretePlugin::save_all()
 
 	CObject::Children kids;
 
-	for (const auto& kid : AP::WORKSPACE::instance()->children())
+	for (const auto& kid : appApi().workspace().children())
 	{
 		kids[kid.first] = kid.second;
 	}
@@ -948,6 +1999,22 @@ void ConcretePlugin::showMainPanel()
 			}
 		}
 		});
+
+	QObject::connect(moj_widget->wybor_siatek->btLiczOkluAg, &QPushButton::clicked, [&]() {
+		if (szcz && zuch) {
+			bool dane_z_pomiaru = moj_widget->wybor_siatek->zPomiaru->isChecked();
+
+			etap00ag(moj_widget->wybor_siatek->okluDist->value(), dane_z_pomiaru);
+
+			moj_widget->wybor_siatek->ustawOkluzje(oklu->getLabel());
+
+			if (szcz && oklu) {
+				moj_widget->etap11->setEnabled(true);
+				moj_widget->przytnij_szczene->setEnabled(true);
+			}
+		}
+		});
+
 
 	moj_layout->addRow(moj_widget->wybor_siatek);
 
@@ -1294,6 +2361,8 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 	UI::PROGRESSBAR::init(0, 100, 0);
 	UI::PROGRESSBAR::setText("Budowa stempla");
 
+	qInfo() << "Tworzenie stempla...";	
+
 	// kopia klocka do p�niejszego wyciskania
 	auto kopia = stempel;
 
@@ -1313,7 +2382,6 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 
 	// tu robi� odcisk tej pogrubionej kopii
 	imprint.diff_of(stempel, dilatedKopia);
-
 
 	UI::PROGRESSBAR::setValue(30);
 
@@ -1363,88 +2431,6 @@ void createStempel(const VoxelGrid& okluzja, VoxelGrid& stempel)
 
 
 
-struct Vec3 {
-	float x, y, z;
-
-	Vec3 operator-(const Vec3& other) const {
-		return Vec3{ x - other.x, y - other.y, z - other.z };
-	}
-
-	float dot(const Vec3& other) const {
-		return x * other.x + y * other.y + z * other.z;
-	}
-
-	Vec3 cross(const Vec3& other) const {
-		return Vec3{
-			y * other.z - z * other.y,
-			z * other.x - x * other.z,
-			x * other.y - y * other.x
-		};
-	}
-
-	float norm() const {
-		return std::sqrt(dot(*this));
-	}
-};
-
-
-float distancePointToTriangle(
-	float px, float py, float pz,
-	const CVertex& v0, const CVertex& v1, const CVertex& v2)
-{
-	Vec3 p{ px, py, pz };
-	Vec3 a{ v0.x, v0.y, v0.z };
-	Vec3 b{ v1.x, v1.y, v1.z };
-	Vec3 c{ v2.x, v2.y, v2.z };
-
-	// edge vectors
-	Vec3 ab = b - a;
-	Vec3 ac = c - a;
-	Vec3 ap = p - a;
-
-	float d1 = ab.dot(ap);
-	float d2 = ac.dot(ap);
-
-	if (d1 <= 0 && d2 <= 0) return (p - a).norm(); // barycentric region outside A
-
-	Vec3 bp = p - b;
-	float d3 = ab.dot(bp);
-	float d4 = ac.dot(bp);
-	if (d3 >= 0 && d4 <= d3) return (p - b).norm(); // outside B
-
-	float vc = d1 * d4 - d3 * d2;
-	if (vc <= 0 && d1 >= 0 && d3 <= 0) {
-		float v = d1 / (d1 - d3);
-		Vec3 proj = Vec3{ a.x + v * ab.x, a.y + v * ab.y, a.z + v * ab.z };
-		return (p - proj).norm(); // on edge AB
-	}
-
-	Vec3 cp = p - c;
-	float d5 = ab.dot(cp);
-	float d6 = ac.dot(cp);
-	if (d6 >= 0 && d5 <= d6) return (p - c).norm(); // outside C
-
-	float vb = d5 * d2 - d1 * d6;
-	if (vb <= 0 && d2 >= 0 && d6 <= 0) {
-		float w = d2 / (d2 - d6);
-		Vec3 proj = Vec3{ a.x + w * ac.x, a.y + w * ac.y, a.z + w * ac.z };
-		return (p - proj).norm(); // on edge AC
-	}
-
-	float va = d3 * d6 - d5 * d4;
-	if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
-		float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-		Vec3 edge = Vec3{ c.x - b.x, c.y - b.y, c.z - b.z };
-		Vec3 proj = Vec3{ b.x + w * edge.x, b.y + w * edge.y, b.z + w * edge.z };
-		return (p - proj).norm(); // on edge BC
-	}
-
-	// inside face region
-	Vec3 n = ab.cross(ac);
-	n = Vec3{ n.x / n.norm(), n.y / n.norm(), n.z / n.norm() }; // unit normal
-	float dist = std::abs((p - a).dot(n));
-	return dist;
-}
 
 
 
@@ -1577,6 +2563,7 @@ std::shared_ptr<CMesh> ConcretePlugin::stampFromMesh(std::shared_ptr<CMesh> mesh
 		VoxelGrid vox_okluzja = rasterizeMeshToVoxels(mesh->vertices(), mesh->faces(), 0.1);
 		VoxelGrid vox_stempel;
 
+		qInfo() << "Rasteryzacja zako�czona. X:" << vox_okluzja.dimX << " Y:" << vox_okluzja.dimY << " Z:" << vox_okluzja.dimZ;
 		createStempel(vox_okluzja, vox_stempel);
 
 		auto vol = createVolumetric(vox_stempel);
@@ -1608,6 +2595,8 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 {
 	//	unsigned long t1 = GetTickCount();
 
+	qInfo() << "Odcisk stempla, tworze KDTree. Stempel: " << stempel->faces().size() << " scianek.";
+
 	KDNode2* tree = KDNode2::build(stempel.get(), 10240);
 	KDNode2::HitMap hmap;
 
@@ -1617,6 +2606,8 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 
 	UI::PROGRESSBAR::init(0, wierzch->vertices().size(), 0);
 	UI::PROGRESSBAR::setText("Imprinting:");
+	
+	qInfo() << "Imprinting " << wierzch->getLabel() << " with " << stempel->getLabel();
 
 	int last_i = 0;
 	for (int i = 0; i < wierzch->vertices().size(); i++) {
@@ -1692,27 +2683,68 @@ void ConcretePlugin::zrobOdciskStempla(std::shared_ptr<CMesh> wierzch, std::shar
 #include "AnnotationSetOfFaces.h"
 #include "triangulacja.h"
 
+//void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
+//
+//	std::map<INDEX_TYPE, std::set<INDEX_TYPE>*> crossed;
+//
+//	if (CollisionDetector::getIntersectionOfMeshWithMesh3d(mesh1, mesh2, crossed))
+//	{
+//		auto ed = std::make_shared<CAnnotationEdges>();
+//
+//		SplitTriangles2(mesh1, mesh2, crossed, *ed);
+//
+//		AP::OBJECT::addChild(mesh1, ed);
+//
+//		UI::STATUSBAR::setText("Ready. You can see sugested faces.");
+//	}
+//	else
+//	{
+//		UI::STATUSBAR::setText("No intersections found");
+//	}
+//
+//
+//
+//}
+
 void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
+	qInfo() << "=== PRZECIECIA: START ===";
+	qInfo() << "Mesh1: faces=" << mesh1->faces().size() << ", vertices=" << mesh1->vertices().size();
+	qInfo() << "Mesh2: faces=" << mesh2->faces().size() << ", vertices=" << mesh2->vertices().size();
 
 	std::map<INDEX_TYPE, std::set<INDEX_TYPE>*> crossed;
 
+	qInfo() << "Wykrywanie kolizji...";
+	UI::PROGRESSBAR::init(0, 100, 0);
+	UI::PROGRESSBAR::setText("Detecting intersections...");
+	UI::PROGRESSBAR::setValue(10);
+
 	if (CollisionDetector::getIntersectionOfMeshWithMesh3d(mesh1, mesh2, crossed))
 	{
+		qInfo() << "Znaleziono przeciec:" << crossed.size();
+
+		UI::PROGRESSBAR::setValue(50);
+		UI::PROGRESSBAR::setText("Splitting triangles...");
+
 		auto ed = std::make_shared<CAnnotationEdges>();
 
+		qInfo() << "Rozdzielanie trojkatow...";
 		SplitTriangles2(mesh1, mesh2, crossed, *ed);
 
+		qInfo() << "Dodawanie krawedzi...";
 		AP::OBJECT::addChild(mesh1, ed);
 
-		UI::STATUSBAR::setText("Ready. You can see sugested faces.");
+		UI::PROGRESSBAR::setValue(100);
+		UI::STATUSBAR::setText("Ready. You can see suggested faces.");
 	}
 	else
 	{
+		qInfo() << "Nie znaleziono przeciec";
+		UI::PROGRESSBAR::hide();
 		UI::STATUSBAR::setText("No intersections found");
 	}
 
-
-
+	UI::PROGRESSBAR::hide();
+	qInfo() << "=== PRZECIECIA: END ===";
 }
 
 
@@ -1720,90 +2752,107 @@ void przeciecia(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2) {
 #include <omp.h>
 #include <mutex>
 
-void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
+void ConcretePlugin::zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove)
 {
-	std::mutex mtx;
+	qInfo() << "=== ZAMIEN PRZECIECIA NA DZIURY ===";
+	qInfo() << "Wierzch vertices:" << wierzch->vertices().size();
+	qInfo() << "Stempel faces:" << stempel->faces().size();
+	qInfo() << "Shift:" << shift << ", mv:" << mv.x << "," << mv.y << "," << mv.z;
 
+	qInfo() << "Budowanie KD-tree...";
 	KDNode2* tree = KDNode2::build(stempel, 5000);
+	qInfo() << "KD-tree zbudowane";
 
-	int last_i = 0;
+	const int num_vertices = wierzch->vertices().size();
 
+	// Użyj vector<bool> zamiast set - szybsze i thread-safe przy zapisie do różnych indeksów
+	std::vector<bool> to_remove(num_vertices, false);
 
-#pragma omp parallel
-	{
-		std::set<INDEX_TYPE> local_set;
+	UI::PROGRESSBAR::init(0, num_vertices, 0);
+	UI::PROGRESSBAR::setText("Finding vertices to remove...");
 
-#pragma omp for
-		for (int i = 0; i < wierzch->vertices().size(); i++) {
+	std::atomic<int> progress(0);
 
-			CVertex p0 = wierzch->vertices()[i];
+	// RÓWNOLEGŁE PRZETWARZANIE - bezpieczne dzięki thread-safe KDNode2::hit()
+#pragma omp parallel for schedule(dynamic, 1000)
+	for (int i = 0; i < num_vertices; i++) {
+		CVertex p0 = wierzch->vertices()[i];
+		CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
 
-			// punkt pocz�tkowy dla wyszukiwania
-			CPoint3d p0mv = p0 + CVector3d(0.0, 0.0, shift);
+		KDNode2::HitMap hmap;  // LOKALNY - każdy wątek ma własny
+		bool hit = tree->hit(stempel, p0mv, mv, hmap);  // THREAD-SAFE (tylko czyta drzewo)
 
-			KDNode2::HitMap hmap;
-			bool hit = tree->hit(stempel, p0mv, mv, hmap);
+		if (hit) {
+			double dist = (*hmap.begin()).second.first;
+			CPoint3d p1 = (*hmap.begin()).second.second;
 
-			if (hit) {
-				double dist = (*hmap.begin()).second.first;
-				CPoint3d p1 = (*hmap.begin()).second.second;
-				int idx = (*hmap.begin()).first;
-
-				if (hmap.size() > 1) {
-					for (auto h : hmap) {
-						double dd = h.second.first;
-
-						if (dd < dist) {
-							dist = dd;
-							p1 = h.second.second;
-							idx = h.first;
-						}
-					}
-				}
-
-				if (dist > abs(shift))
-				{
-					// punkt nale�y do przeciecia
-					local_set.insert(i);
-
-					if (last_i + 1000 < i) {
-						qInfo() << "i = " << i << " dist = " << dist;
-						last_i = i;
+			if (hmap.size() > 1) {
+				for (auto h : hmap) {
+					double dd = h.second.first;
+					if (dd < dist) {
+						dist = dd;
+						p1 = h.second.second;
 					}
 				}
 			}
 
+			if (dist > abs(shift)) {
+				to_remove[i] = true;  // THREAD-SAFE - każdy wątek pisze do INNEGO indeksu
+			}
 		}
 
-		// Po zako�czeniu pracy w�tku, scal wyniki
-		std::lock_guard<std::mutex> lock(mtx);
-		vertices_to_remove.insert(local_set.begin(), local_set.end());
-
+		// Progress bar - aktualizuj MAX 100 razy (nie co 1000 wierzchołków)
+		int current_progress = ++progress;
+		const int update_interval = std::max(1, num_vertices / 100);
+		if (current_progress % update_interval == 0) {
+#pragma omp critical
+			{
+				//UI::PROGRESSBAR::setValue(current_progress);
+				emit setProgressBarValue(current_progress);
+			}
+		}
 	}
+
+	// Konwersja vector<bool> -> set<INDEX_TYPE> (jednowątkowo, ale szybkie)
+	for (int i = 0; i < num_vertices; i++) {
+		if (to_remove[i]) {
+			vertices_to_remove.insert(i);
+		}
+	}
+
+	UI::PROGRESSBAR::hide();
+	qInfo() << "Znaleziono wierzcholkow do usuniecia:" << vertices_to_remove.size();
+	qInfo() << "=================================";
 }
 
-
-
-std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze)
+std::pair<std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze)
 {
+	qInfo() << "=== ZROB DZIURY: START ===";
+	qInfo() << "Wierzch: faces=" << wierzch->faces().size() << ", vertices=" << wierzch->vertices().size();
+	qInfo() << "Wnetrze: faces=" << wnetrze->faces().size() << ", vertices=" << wnetrze->vertices().size();
+
 	UI::PROGRESSBAR::init(0, 100, 0);
 	UI::PROGRESSBAR::setText("Making holes:");
 
 	if (wierzch && wnetrze)
 	{
+		qInfo() << "Kopiowanie wierzchu...";
 		auto wierzch_nowy = std::dynamic_pointer_cast<CMesh>(wierzch->getCopy());
 		wierzch_nowy->setParent(nullptr);
 		wierzch_nowy->removeDuplicateVertices();
 
 		UI::PROGRESSBAR::setValue(10);
 
+		qInfo() << "Kopiowanie wnetrza...";
 		auto wnetrze_nowe = std::dynamic_pointer_cast<CMesh>(wnetrze->getCopy());
 		wnetrze_nowe->setParent(nullptr);
 		wnetrze_nowe->removeDuplicateVertices();
 
 		UI::PROGRESSBAR::setValue(20);
 
+		qInfo() << "--- PRZECIECIA START ---";
 		przeciecia(wierzch_nowy, wnetrze_nowe);
+		qInfo() << "--- PRZECIECIA END ---";
 
 		UI::PROGRESSBAR::init(0, 30, 0);
 		UI::PROGRESSBAR::setText("Making holes:");
@@ -1914,6 +2963,7 @@ std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> ConcretePlugin::zrobD
 
 		UI::PROGRESSBAR::hide();
 
+		qInfo() << "=== ZROB DZIURY: END ===";
 		return { wierzch_nowy, wnetrze_nowe };
 	}
 
@@ -2098,97 +3148,208 @@ std::shared_ptr<CMesh> scalSiatki(std::vector<std::shared_ptr<CMesh>> siatki)
 }
 
 
-std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze) {
+//std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze) {
+//
+//	UI::PROGRESSBAR::init(0, 100, 0);
+//	UI::PROGRESSBAR::setText("Bridging:");
+//
+//	if (wierzch && wnetrze)
+//	{
+//		wierzch->removeDuplicateVertices();
+//		wnetrze->removeDuplicateVertices();
+//
+//		UI::PROGRESSBAR::setValue(10);
+//
+//		std::pair< std::vector<CVertex>, std::vector<CFace> > result;
+//
+//		std::vector<CEdge> sz_ed;
+//		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> sz_bGraph;
+//
+//		findBoundaryEdgesWithDirection(wierzch->faces(), sz_ed, sz_bGraph);
+//
+//		UI::PROGRESSBAR::setValue(30);
+//
+//		std::vector<std::vector<INDEX_TYPE>> sz_loops = findBoundaryLoops(sz_bGraph);
+//
+//		UI::PROGRESSBAR::setValue(50);
+//
+//		auto sz_ae = std::make_shared<CAnnotationEdges>();
+//
+//		std::vector<INDEX_TYPE> IS_V;
+//
+//		for (auto e : sz_ed) {
+//			IS_V.push_back(e.first);
+//			sz_ae->addEdge(wierzch->vertices()[e.first], wierzch->vertices()[e.second]);
+//		}
+//
+//
+//		std::vector<CEdge> ok_ed;
+//		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> ok_bGraph;
+//
+//		UI::PROGRESSBAR::setValue(55);
+//
+//		findBoundaryEdgesWithDirection(wnetrze->faces(), ok_ed, ok_bGraph);
+//		std::vector<std::vector<INDEX_TYPE>> ok_loops = findBoundaryLoops(ok_bGraph);
+//
+//		UI::PROGRESSBAR::setValue(65);
+//
+//		auto ok_ae = std::make_shared<CAnnotationEdges>();
+//
+//		std::vector<INDEX_TYPE> IS_VZ;
+//
+//		for (auto e : ok_ed) {
+//			IS_VZ.push_back(e.first);
+//			ok_ae->addEdge(wnetrze->vertices()[e.first], wnetrze->vertices()[e.second]);
+//		}
+//
+//		std::vector<std::shared_ptr<CMesh>> siatki;
+//
+//		UI::PROGRESSBAR::setValue(70);
+//
+//		for (auto l = 0; l < sz_loops.size(); l++) {
+//
+//			qInfo() << QString("loop: %1, size: %2").arg(l).arg(sz_loops[l].size());
+//
+//			result = BridgingByMidpointMatching(wierzch->vertices(), sz_loops[l], wnetrze->vertices(), IS_VZ, 8.0);
+//
+//			qInfo() << QString("---- vertices: %1, faces: %2").arg(result.first.size()).arg(result.second.size());
+//
+//			auto mostki = std::make_shared<CMesh>();
+//
+//			mostki->vertices() = result.first;
+//			mostki->faces() = result.second;
+//
+//			mostki->removeDuplicateVertices();
+//
+//			siatki.push_back(mostki);
+//		}
+//
+//		UI::PROGRESSBAR::setValue(90);
+//
+//		auto mesh1 = scalSiatki(siatki);
+//
+//		auto test = scalSiatki({ wierzch, wnetrze, mesh1 });
+//
+//		UI::PROGRESSBAR::hide();
+//
+//		return test;
+//	}
+//
+//	UI::PROGRESSBAR::hide();
+//
+//	return nullptr;
+//}
+//
 
+std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze) {
 	UI::PROGRESSBAR::init(0, 100, 0);
 	UI::PROGRESSBAR::setText("Bridging:");
 
-	if (wierzch && wnetrze)
-	{
-		wierzch->removeDuplicateVertices();
-		wnetrze->removeDuplicateVertices();
-
-		UI::PROGRESSBAR::setValue(10);
-
-		std::pair< std::vector<CVertex>, std::vector<CFace> > result;
-
-		std::vector<CEdge> sz_ed;
-		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> sz_bGraph;
-
-		findBoundaryEdgesWithDirection(wierzch->faces(), sz_ed, sz_bGraph);
-
-		UI::PROGRESSBAR::setValue(30);
-
-		std::vector<std::vector<INDEX_TYPE>> sz_loops = findBoundaryLoops(sz_bGraph);
-
-		UI::PROGRESSBAR::setValue(50);
-
-		auto sz_ae = std::make_shared<CAnnotationEdges>();
-
-		std::vector<INDEX_TYPE> IS_V;
-
-		for (auto e : sz_ed) {
-			IS_V.push_back(e.first);
-			sz_ae->addEdge(wierzch->vertices()[e.first], wierzch->vertices()[e.second]);
-		}
-
-
-		std::vector<CEdge> ok_ed;
-		std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> ok_bGraph;
-
-		UI::PROGRESSBAR::setValue(55);
-
-		findBoundaryEdgesWithDirection(wnetrze->faces(), ok_ed, ok_bGraph);
-		std::vector<std::vector<INDEX_TYPE>> ok_loops = findBoundaryLoops(ok_bGraph);
-
-		UI::PROGRESSBAR::setValue(65);
-
-		auto ok_ae = std::make_shared<CAnnotationEdges>();
-
-		std::vector<INDEX_TYPE> IS_VZ;
-
-		for (auto e : ok_ed) {
-			IS_VZ.push_back(e.first);
-			ok_ae->addEdge(wnetrze->vertices()[e.first], wnetrze->vertices()[e.second]);
-		}
-
-		std::vector<std::shared_ptr<CMesh>> siatki;
-
-		UI::PROGRESSBAR::setValue(70);
-
-		for (auto l = 0; l < sz_loops.size(); l++) {
-
-			qInfo() << QString("loop: %1, size: %2").arg(l).arg(sz_loops[l].size());
-
-			result = BridgingByMidpointMatching(wierzch->vertices(), sz_loops[l], wnetrze->vertices(), IS_VZ, 8.0);
-
-			qInfo() << QString("---- vertices: %1, faces: %2").arg(result.first.size()).arg(result.second.size());
-
-			auto mostki = std::make_shared<CMesh>();
-
-			mostki->vertices() = result.first;
-			mostki->faces() = result.second;
-
-			mostki->removeDuplicateVertices();
-
-			siatki.push_back(mostki);
-		}
-
-		UI::PROGRESSBAR::setValue(90);
-
-		auto mesh1 = scalSiatki(siatki);
-
-		auto test = scalSiatki({ wierzch, wnetrze, mesh1 });
-
+	if (!wierzch || !wnetrze) {
 		UI::PROGRESSBAR::hide();
-
-		return test;
+		return nullptr;
 	}
 
-	UI::PROGRESSBAR::hide();
+	wierzch->removeDuplicateVertices();
+	wnetrze->removeDuplicateVertices();
 
-	return nullptr;
+	UI::PROGRESSBAR::setValue(10);
+
+	// 1. Znajdź krawędzie brzegowe
+	std::vector<CEdge> wierzch_edges, wnetrze_edges;
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> wierzch_graph, wnetrze_graph;
+
+	findBoundaryEdgesWithDirection(wierzch->faces(), wierzch_edges, wierzch_graph);
+	UI::PROGRESSBAR::setValue(30);
+
+	auto wierzch_loops = findBoundaryLoops(wierzch_graph);
+	UI::PROGRESSBAR::setValue(50);
+
+	findBoundaryEdgesWithDirection(wnetrze->faces(), wnetrze_edges, wnetrze_graph);
+	UI::PROGRESSBAR::setValue(65);
+
+	auto wnetrze_loops = findBoundaryLoops(wnetrze_graph);
+	UI::PROGRESSBAR::setValue(70);
+
+	// 2. KRYTYCZNA ZMIANA: Scalamy najpierw meshes, potem dodajemy mostki
+	auto combined = std::make_shared<CMesh>();
+
+	// Kopiuj wierzch
+	size_t wierzch_offset = 0;
+	for (const auto& v : wierzch->vertices()) {
+		combined->vertices().push_back(v);
+	}
+	for (const auto& f : wierzch->faces()) {
+		combined->faces().push_back(f);
+	}
+
+	// Kopiuj wnętrze
+	size_t wnetrze_offset = combined->vertices().size();
+	for (const auto& v : wnetrze->vertices()) {
+		combined->vertices().push_back(v);
+	}
+	for (const auto& f : wnetrze->faces()) {
+		combined->faces().emplace_back(
+			f.A() + wnetrze_offset,
+			f.B() + wnetrze_offset,
+			f.C() + wnetrze_offset
+		);
+	}
+
+	UI::PROGRESSBAR::setValue(75);
+
+	// 3. Dodaj mostki REUŻYWAJĄC istniejących wierzchołków
+	for (size_t loop_idx = 0; loop_idx < wierzch_loops.size(); ++loop_idx) {
+		const auto& loop = wierzch_loops[loop_idx];
+
+		qInfo() << "Bridging loop" << loop_idx << "size:" << loop.size();
+
+		for (size_t i = 0; i < loop.size(); ++i) {
+			size_t i_next = (i + 1) % loop.size();
+
+			INDEX_TYPE vA = loop[i] + wierzch_offset;       // Wierzchołek na wierzchu
+			INDEX_TYPE vB = loop[i_next] + wierzch_offset;
+
+			// Znajdź środek krawędzi
+			const CVertex& a = combined->vertices()[vA];
+			const CVertex& b = combined->vertices()[vB];
+			CVertex mid;
+			mid.x = (a.x + b.x) * 0.5f;
+			mid.y = (a.y + b.y) * 0.5f;
+			mid.z = (a.z + b.z) * 0.5f;
+
+			// Znajdź najbliższy wierzchołek z wnętrza
+			float minDist = std::numeric_limits<float>::max();
+			INDEX_TYPE bestVnetrze = -1;
+
+			for (const auto& e : wnetrze_edges) {
+				INDEX_TYPE candidate = e.first + wnetrze_offset;
+				float dist = squaredDistance(mid, combined->vertices()[candidate]);
+
+				if (dist < minDist) {
+					minDist = dist;
+					bestVnetrze = candidate;
+				}
+			}
+
+			if (bestVnetrze != static_cast<INDEX_TYPE>(-1) && minDist < 64.0f) { // 8mm^2
+				// Dodaj trójkąt REUŻYWAJĄC istniejących wierzchołków
+				combined->faces().emplace_back(vA, bestVnetrze, vB);
+			}
+		}
+	}
+
+	UI::PROGRESSBAR::setValue(90);
+
+	// 4. Usuń duplikaty (powinno być minimalnie potrzebne)
+	combined->removeDuplicateVertices(0.01f);
+
+	UI::PROGRESSBAR::hide();
+	return combined;
 }
+
+
+
 
 
 //----------------------------------------------------------------------------
@@ -2196,7 +3357,7 @@ std::shared_ptr<CMesh> ConcretePlugin::bridging(std::shared_ptr<CMesh> wierzch, 
 
 #include <queue>
 
-std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& graph)
+std::vector<INDEX_TYPE> findShortestCycleFrom_BAK(INDEX_TYPE start, const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& graph)
 {
 	std::queue<std::vector<INDEX_TYPE>> q;
 	std::unordered_set<INDEX_TYPE> visited;
@@ -2229,11 +3390,55 @@ std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unord
 	return {}; // brak cyklu
 }
 
+std::vector<INDEX_TYPE> findShortestCycleFrom(INDEX_TYPE start, const std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>>& graph)
+{
+	std::queue<std::pair<INDEX_TYPE, INDEX_TYPE>> q; // (current, parent)
+	std::unordered_map<INDEX_TYPE, INDEX_TYPE> parent;
+	std::unordered_set<INDEX_TYPE> visited;
+
+	q.push({ start, (INDEX_TYPE)-1 });
+	visited.insert(start);
+
+	while (!q.empty()) {
+		auto [current, prev] = q.front();
+		q.pop();
+
+		auto it = graph.find(current);
+		if (it == graph.end())
+			continue;
+
+		for (INDEX_TYPE neighbor : it->second) {
+			// Znaleziono cykl
+			if (neighbor == start && parent.size() >= 2) {
+				std::vector<INDEX_TYPE> path;
+				path.push_back(start);
+				INDEX_TYPE node = current;
+				while (node != start) {
+					path.push_back(node);
+					node = parent[node];
+				}
+				path.push_back(start);
+				std::reverse(path.begin(), path.end());
+				return path;
+			}
+
+			// Pomiń rodzica (unikamy natychmiastowego powrotu)
+			if (neighbor == prev)
+				continue;
+
+			if (visited.find(neighbor) == visited.end()) {
+				visited.insert(neighbor);
+				parent[neighbor] = current;
+				q.push({ neighbor, current });
+			}
+		}
+	}
+
+	return {}; // brak cyklu
+}
 
 
-
-
-std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges(const std::vector<CEdge>& boundaryEdges)
+std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges_BAK(const std::vector<CEdge>& boundaryEdges)
 {
 	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> graph;
 	std::unordered_set<INDEX_TYPE> vertices_remains;
@@ -2270,6 +3475,44 @@ std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges(const std::vecto
 }
 
 
+std::vector<std::vector<INDEX_TYPE>> findBoundaryLoopsFromEdges(const std::vector<CEdge>& boundaryEdges)
+{
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> graph;
+	std::unordered_set<INDEX_TYPE> vertices_remains;
+
+	// Budowa grafu z rezerwacją pamięci
+	graph.reserve(boundaryEdges.size() * 2);
+	vertices_remains.reserve(boundaryEdges.size() * 2);
+
+	for (const CEdge& edge : boundaryEdges) {
+		graph[edge.first].push_back(edge.second);
+		vertices_remains.insert(edge.first);
+		vertices_remains.insert(edge.second);
+	}
+
+	std::vector<std::vector<INDEX_TYPE>> loops;
+	loops.reserve(vertices_remains.size() / 10); // estymacja liczby pętli
+
+	while (!vertices_remains.empty()) {
+		INDEX_TYPE current = *vertices_remains.begin();
+		std::vector<INDEX_TYPE> path = findShortestCycleFrom(current, graph);
+
+		if (path.empty()) {
+			vertices_remains.erase(current);
+		}
+		else {
+			loops.push_back(std::move(path));
+
+			// Usuwanie wszystkich wierzchołków z pętli naraz
+			for (INDEX_TYPE p : loops.back()) {
+				vertices_remains.erase(p);
+			}
+		}
+	}
+
+	return loops;
+}
+
 
 #include "AnnotationEdges.h"
 #include "../api/AP.h"
@@ -2286,7 +3529,11 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 	std::vector<CEdge> boundaryEdges;
 	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> boundaryGraph;
 
+	qInfo() << "Znajdowanie krawedzi brzegowych...";
+
 	findBoundaryEdgesWithDirection(faces, boundaryEdges, boundaryGraph);
+
+	qInfo() << "Znaleziono krawedzi brzegowych:" << boundaryEdges.size();
 
 	UI::PROGRESSBAR::setValue(10);
 
@@ -2377,25 +3624,103 @@ std::pair<std::vector<CVertex>, std::vector<CFace>> FillBoundaryLoops(const std:
 
 
 
-std::shared_ptr<CMesh> ConcretePlugin::filling(std::shared_ptr<CMesh> test)
-{
-	if (test)
-	{
-		test->removeDuplicateVertices();
+//std::shared_ptr<CMesh> ConcretePlugin::filling(std::shared_ptr<CMesh> test)
+//{
+//	if (test)
+//	{
+//		test->removeDuplicateVertices();
+//
+//		auto new_faces = FillBoundaryLoops(test->vertices(), test->faces());
+//
+//		auto nowe = std::make_shared<CMesh>();
+//
+//		nowe->vertices() = new_faces.first;
+//		nowe->faces() = new_faces.second;
+//
+//		nowe->removeDuplicateVertices();
+//
+//		auto full = scalSiatki({ test, nowe });
+//
+//		return full;
+//	}
+//
+//	return nullptr;
+//}
 
-		auto new_faces = FillBoundaryLoops(test->vertices(), test->faces());
+std::shared_ptr<CMesh> ConcretePlugin::filling(std::shared_ptr<CMesh> mesh) {
+	if (!mesh) return nullptr;
 
-		auto nowe = std::make_shared<CMesh>();
+	mesh->removeDuplicateVertices();
 
-		nowe->vertices() = new_faces.first;
-		nowe->faces() = new_faces.second;
+	UI::PROGRESSBAR::init(0, 100, 0);
+	UI::PROGRESSBAR::setText("Filling:");
 
-		nowe->removeDuplicateVertices();
+	// 1. Znajdź krawędzie brzegowe
+	std::vector<CEdge> boundaryEdges;
+	std::unordered_map<INDEX_TYPE, std::vector<INDEX_TYPE>> boundaryGraph;
 
-		auto full = scalSiatki({ test, nowe });
+	qInfo() << "Finding boundary edges...";
+	findBoundaryEdgesWithDirection(mesh->faces(), boundaryEdges, boundaryGraph);
+	qInfo() << "Found boundary edges:" << boundaryEdges.size();
 
-		return full;
+	UI::PROGRESSBAR::setValue(15);
+
+	auto loops = findBoundaryLoopsFromEdges(boundaryEdges);
+	qInfo() << "Found loops:" << loops.size();
+
+	UI::PROGRESSBAR::setValue(25);
+
+	// 2. KRYTYCZNA ZMIANA: Dodawaj trójkąty bezpośrednio do meshu
+	std::vector<CVertex>& vertices = mesh->vertices();
+	std::vector<CFace>& faces = mesh->faces();
+
+	int cnt = 0;
+	for (const auto& loop : loops) {
+		qInfo() << "Filling loop" << cnt++ << "size:" << loop.size();
+
+		if (loop.size() < 3) {
+			qInfo() << "INVALID LOOP (too small)";
+			continue;
+		}
+		if (loop.size() > 500) {
+			qInfo() << "INVALID LOOP (too large)";
+			continue;
+		}
+
+		if (loop.size() == 3) {
+			// Trójkąt już istnieje jako brzeg
+			faces.emplace_back(loop[0], loop[1], loop[2]);
+		}
+		else {
+			// Oblicz centroid
+			CVertex center = { 0, 0, 0 };
+			for (INDEX_TYPE idx : loop) {
+				center += vertices[idx];
+			}
+			center *= (1.0f / loop.size());
+
+			// Dodaj centroid
+			INDEX_TYPE centerIdx = vertices.size();
+			vertices.push_back(center);
+
+			// Dodaj wachlarze REUŻYWAJĄC istniejących wierzchołków brzegu
+			for (size_t i = 0; i < loop.size(); ++i) {
+				INDEX_TYPE vA = loop[i];
+				INDEX_TYPE vB = loop[(i + 1) % loop.size()];
+				faces.emplace_back(vA, centerIdx, vB);
+			}
+		}
+
+		UI::PROGRESSBAR::setValue(25 + cnt);
 	}
 
-	return nullptr;
+	// 3. Usuń duplikaty (minimalne - większość powinna być już wspólna)
+	mesh->removeDuplicateVertices(0.001f);
+
+	UI::PROGRESSBAR::hide();
+	qInfo() << "Filling complete. Final faces:" << mesh->faces().size();
+
+	return mesh;
 }
+
+

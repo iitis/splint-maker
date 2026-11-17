@@ -49,13 +49,15 @@ class DPVISION_DLL_API ConcretePlugin : public QObject, public PluginInterface
 	QWidget *panel, *subpanel;
 	QFormLayout *moj_layout;
 
+	bool testyAG = true;
+
 	MojWidget* moj_widget;
 
 	bool m_picking;
 	std::shared_ptr<BiteSim> symulator;
 
 	std::shared_ptr<CAnnotationPlane> m_cutPlane;
-	std::shared_ptr<CAnnotationPlane> m_plaszczyzna_rzutowania;
+	std::shared_ptr<CAnnotationPlane> m_projectionPlane;
 
 	int m_divider;
 	CzekamNa waiting_for;
@@ -91,6 +93,7 @@ public:
 	 * @param dist Distance threshold.
 	 * @return Resulting mesh.
 	 */
+	std::shared_ptr<CMesh> liczOkluzjeORG(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist);
 	std::shared_ptr<CMesh> liczOkluzje(std::shared_ptr<CMesh> szczeka, std::shared_ptr<CMesh> zuchwa, double dist);
 
 	/**
@@ -104,13 +107,18 @@ public:
 
 	void wczytaj_spreparowany_ATMDL();
 
+
 	void etap00(double dist2, bool dane_z_pomiaru);
+	void etap00ag(double dist2, bool dane_z_pomiaru);
+
 	void etap01(int div);
 	void etap11();
-    void etap123(double dValIn, double dValOut);
+	void etap123(double dValIn, double dValOut);
     void reset_plugin();
     void wytlaczanie();
     void etap14();
+
+	void etap14_nowy();
 
 	void save_all();
 
@@ -138,6 +146,7 @@ public:
 	 * @return Pair of meshes with holes.
 	 */
 	std::pair< std::shared_ptr<CMesh>, std::shared_ptr<CMesh>> zrobDziury(std::shared_ptr<CMesh> wierzch, std::shared_ptr<CMesh> wnetrze);
+	void zamienPrzecieciaNaDziury2(CMesh* wierzch, CMesh* stempel, double shift, CVector3d mv, std::set<INDEX_TYPE>& vertices_to_remove);
 
 	/**
 	 * @brief Bridges two meshes by connecting their boundaries.

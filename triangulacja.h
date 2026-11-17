@@ -98,7 +98,10 @@ std::vector<Triangle2> ear_clipping_triangulate2D(const std::vector<Point2>& inp
 		std::reverse(poly.begin(), poly.end());
 
 	// G³ówna pêtla algorytmu ear clipping
-	while (poly.size() > 3) {
+	int maxIterations = poly.size() * 3; // Bezpieczna granica
+	int iterations = 0;
+	while (poly.size() > 3 && iterations < maxIterations) {
+		iterations++;
 		bool earFound = false;
 		n = poly.size();
 		for (int i = 0; i < n; i++) {
@@ -124,24 +127,27 @@ std::vector<Triangle2> ear_clipping_triangulate2D(const std::vector<Point2>& inp
 				}
 			}
 
-			if (!ear)
-				continue;
+			if (ear) {
+				// Znaleziono "uszek" – tworzymy trójk¹t i usuwamy œrodkowy wierzcho³ek b.
+				Triangle2 tri;
+				tri.p1 = a;
+				tri.p2 = b;
+				tri.p3 = c;
+				triangles.push_back(tri);
 
-			// Znaleziono "uszek" – tworzymy trójk¹t i usuwamy œrodkowy wierzcho³ek b.
-			Triangle2 tri;
-			tri.p1 = a;
-			tri.p2 = b;
-			tri.p3 = c;
-			triangles.push_back(tri);
-
-			poly.erase(poly.begin() + i);
-			earFound = true;
-			break; // Zaktualizowaliœmy wielok¹t, zaczynamy od nowa.
+				poly.erase(poly.begin() + i);
+				earFound = true;
+				break; // Zaktualizowaliœmy wielok¹t, zaczynamy od nowa.
+			}
 		}
 		if (!earFound) {
-			// Jeœli nie znaleziono ¿adnego "uszka", wielok¹t mo¿e byæ zdegenerowany lub nie jest prosty.
-			break;
+			qWarning() << "Ear clipping: nie znaleziono uszka, polygon size:" << poly.size();
+			break; // PRZERWIJ zamiast zapêtlaæ
 		}
+	}
+
+	if (iterations >= maxIterations) {
+		qCritical() << "Ear clipping: TIMEOUT po" << iterations << "iteracjach!";
 	}
 
 	// Na koñcu pozostan¹ trzy punkty – ostatni trójk¹t.
@@ -160,7 +166,7 @@ std::vector<Triangle2> ear_clipping_triangulate2D(const std::vector<Point2>& inp
 std::vector<Triangle2> TriangulatePolygon2D(const std::vector<Point2>& polygon2D) {
 	std::vector<Triangle2> tris2D;
 	// Tu umieœæ algorytm ear clipping dla 2D, operuj¹cy na strukturze Point2D.
-	// Dla uproszczenia zak³adamy, ¿e taka funkcja ju¿ istnieje.
+	// Dla uproszczenia zak³adamy, ¿e taka funkcja ju¿ istnieje;
 
 
 
@@ -211,18 +217,15 @@ std::vector<CTriangle> TriangulatePolygon3D(const std::vector<CVertex>& polygon,
 // Funkcja ExtractFaces – zwraca listê face'ów, gdzie ka¿dy face to uporz¹dkowany wektor wierzcho³ków
 std::vector<std::vector<CVertex>> ExtractFaces(const std::map<CVertex, std::vector<CVertex>>& graph)
 {
-	// Zbiór u¿ytych skierowanych krawêdzi: para (u, v) oznacza, ¿e krawêdŸ u->v zosta³a ju¿ u¿yta.
 	std::set<std::pair<CVertex, CVertex>> usedEdges;
 	std::vector<std::vector<CVertex>> faces;
 
-	// Dla ka¿dego wierzcho³ka u i ka¿dego s¹siada v (krawêdŸ skierowana)
 	for (const auto& pair : graph)
 	{
 		const CVertex& u = pair.first;
 		const auto& neighbors = pair.second;
 		for (const auto& v : neighbors)
 		{
-			// Jeœli krawêdŸ (u->v) ju¿ by³a u¿yta, pomijamy
 			if (usedEdges.find({ u, v }) != usedEdges.end())
 				continue;
 
@@ -230,47 +233,47 @@ std::vector<std::vector<CVertex>> ExtractFaces(const std::map<CVertex, std::vect
 			CVertex currentU = u;
 			CVertex currentV = v;
 
-			// Rozpoczynamy cykl – zachowujemy pierwsz¹ krawêdŸ
 			std::pair<CVertex, CVertex> startEdge = { u, v };
 
-			while (true)
+			// NOWE: zabezpieczenie przed nieskoñczon¹ pêtl¹
+			int maxIterations = graph.size() * 3;
+			int iterations = 0;
+
+			while (iterations < maxIterations)
 			{
+				iterations++;
 				usedEdges.insert({ currentU, currentV });
 				face.push_back(currentU);
 
-				// W wierzcho³ku currentV, znajdŸ pozycjê currentU na liœcie s¹siadów
 				const auto& nbrs = graph.at(currentV);
 				auto it = std::find(nbrs.begin(), nbrs.end(), currentU);
 				if (it == nbrs.end())
 				{
-					// B³¹d – powinno siê znaleŸæ currentU, jeœli graf jest spójny.
+					qWarning() << "ExtractFaces: nie znaleziono currentU w sasiadach currentV - przerywam";
 					break;
 				}
 
-				// Wybieramy s¹siada tu¿ przed currentU (przy cyklicznym uporz¹dkowaniu)
 				if (it == nbrs.begin())
 					it = nbrs.end();
 				--it;
 				CVertex nextV = *it;
 
-				// Przygotowujemy kolejn¹ krawêdŸ: currentV -> nextV
 				currentU = currentV;
 				currentV = nextV;
 
-				// Jeœli wróciliœmy do pocz¹tku, cykl zamkniêty
 				if (currentU == u && currentV == v)
 				{
 					break;
 				}
-
-				// Zabezpieczenie przed nieskoñczon¹ pêtl¹ – mo¿na dodaæ dodatkowy warunek.
 			}
 
-			// Dla spójnoœci, jeœli face nie zawiera ostatniego wierzcho³ka (który zamyka cykl), dodajemy go.
+			if (iterations >= maxIterations) {
+				qCritical() << "ExtractFaces: TIMEOUT po" << iterations << "iteracjach!";
+			}
+
 			if (!face.empty() && face.front() != face.back())
 				face.push_back(face.front());
 
-			// Dodajemy wyznaczony face do listy
 			faces.push_back(face);
 		}
 	}
@@ -428,78 +431,84 @@ std::vector<CVertex> RemoveDuplicatePoints(const std::vector<CVertex>& points, f
 
 
 std::vector<CTriangle> SubdivideTriangle(const CTriangle& T,
-	const std::set<std::pair<CVertex, CVertex>>& intersectionSegments)
+    const std::set<std::pair<CVertex, CVertex>>& intersectionSegments)
 {
-	std::vector<CTriangle> subdividedTriangles;
+    std::vector<CTriangle> subdividedTriangles;
 
-	// Krok 1: Zbierz wszystkie wierzcho³ki
-	std::vector<CVertex> allPoints = { T[0], T[1], T[2] };
+    // OPTYMALIZACJA: jeœli brak przeciêæ, zachowaj oryginalny trójk¹t
+    if (intersectionSegments.empty()) {
+        subdividedTriangles.push_back(T);
+        return subdividedTriangles;
+    }
 
-	for (const auto& seg : intersectionSegments)
-	{
-		allPoints.push_back(seg.first);
-		allPoints.push_back(seg.second);
-	}
+    // Krok 1: Zbierz wszystkie wierzcho³ki
+    std::vector<CVertex> allPoints = { T[0], T[1], T[2] };
 
-	allPoints = RemoveDuplicatePoints(allPoints, 1e-6f);
+    for (const auto& seg : intersectionSegments)
+    {
+        allPoints.push_back(seg.first);
+        allPoints.push_back(seg.second);
+    }
 
+    allPoints = RemoveDuplicatePoints(allPoints, 1e-6f);
 
-	// Krok 2: Budujemy graf – wierzcho³ki i krawêdzie (segmenty)
-	std::map<CVertex, std::vector<CVertex>> graph = BuildGraph(T, intersectionSegments);
+    // OPTYMALIZACJA: jeœli po usuniêciu duplikatów s¹ tylko 3 punkty, zachowaj oryginalny
+    if (allPoints.size() == 3) {
+        subdividedTriangles.push_back(T);
+        return subdividedTriangles;
+    }
 
-	// Krok 2a: Sortujemy listy s¹siadów dla ka¿dego wierzcho³ka
-	SortNeighbors(graph);
+    // Krok 2: Budujemy graf – wierzcho³ki i krawêdzie (segmenty)
+    std::map<CVertex, std::vector<CVertex>> graph = BuildGraph(T, intersectionSegments);
 
-	qInfo() << "  graph size: " << graph.size();
+    // Krok 2a: Sortujemy listy s¹siadów dla ka¿dego wierzcho³ka
+    SortNeighbors(graph);
 
-	if (graph.size() > 3) {
+    qInfo() << "  graph size: " << graph.size();
 
-		for (auto g : graph) {
-			std::cout << "    ( " << g.first.x << ", " << g.first.y << ", " << g.first.z << " ) --> ";
-			std::cout << "no. neighbours: " << g.second.size() << "\n";
-		}
+    // OPTYMALIZACJA: jeœli graf ma tylko 3 wierzcho³ki, zachowaj oryginalny
+    if (graph.size() <= 3) {
+        subdividedTriangles.push_back(T);
+        return subdividedTriangles;
+    }
 
+    for (auto g : graph) {
+        std::cout << "    ( " << g.first.x << ", " << g.first.y << ", " << g.first.z << " ) --> ";
+        std::cout << "no. neighbours: " << g.second.size() << "\n";
+    }
 
-		// Krok 3: Ekstrakcja face'ów z grafu
-		std::vector<std::vector<CVertex>> faces = ExtractFaces(graph);
+    // Krok 3: Ekstrakcja face'ów z grafu
+    std::vector<std::vector<CVertex>> faces = ExtractFaces(graph);
+    faces = FilterInternalFaces(faces, T);
 
-		//qInfo() << "  has faces: " << faces.size();
+    // Krok 4: Ka¿dy face (wielok¹t) triangulujemy, o ile nie jest ju¿ trójk¹tem
+    for (const auto& face : faces) {
+        if (face.size() < 3)
+            continue; // pomijamy nieprawid³owe lub zdegenerowane face'y
 
-		faces = FilterInternalFaces(faces, T);
+        if (face.size() == 3) {
+            CTriangle tri;
+            tri[0] = face[0];
+            tri[1] = face[1];
+            tri[2] = face[2];
+            subdividedTriangles.push_back(tri);
+        }
+        else {
+            // U¿ywamy nowej funkcji trianguluj¹cej 3D z rzutowaniem do lokalnego uk³adu
+            std::vector<CTriangle> tris = TriangulatePolygon3D(face, T);
+            subdividedTriangles.insert(subdividedTriangles.end(), tris.begin(), tris.end());
+        }
+    }
 
+    qInfo() << "  subdivided triangles: " << subdividedTriangles.size();
 
-		//qInfo() << "  filtered faces: " << faces.size();
+    // OSTATNIA SZANSA: jeœli po wszystkim mamy 0 trójk¹tów, zachowaj oryginalny
+    if (subdividedTriangles.empty()) {
+        qWarning() << "SubdivideTriangle: wszystkie face'y odfiltrowane - zachowuje oryginal";
+        subdividedTriangles.push_back(T);
+    }
 
-		// Krok 4: Ka¿dy face (wielok¹t) triangulujemy, o ile nie jest ju¿ trójk¹tem
-		for (const auto& face : faces) {
-			if (face.size() < 3)
-				continue; // pomijamy nieprawid³owe lub zdegenerowane face'y
-
-			if (face.size() == 3) {
-				CTriangle tri;
-				tri[0] = face[0];
-				tri[1] = face[1];
-				tri[2] = face[2];
-				subdividedTriangles.push_back(tri);
-			}
-			else {
-				// U¿ywamy nowej funkcji trianguluj¹cej 3D z rzutowaniem do lokalnego uk³adu
-				std::vector<CTriangle> tris = TriangulatePolygon3D(face, T);
-				subdividedTriangles.insert(subdividedTriangles.end(), tris.begin(), tris.end());
-			}
-		}
-
-
-
-		qInfo() << "  subdivided triangles: " << subdividedTriangles.size();
-
-		for (auto t : subdividedTriangles) {
-			std::cout << "    ( " << t.a.toRowVector3() << ", " << t.b.toRowVector3() << ", " << t.c.toRowVector3() << " )\n";
-		}
-
-	}
-
-	return subdividedTriangles;
+    return subdividedTriangles;
 }
 
 
@@ -597,77 +606,125 @@ bool IntersectTriangles3D(
 }
 
 
-std::vector<CTriangle> SplitTriangle2(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2, const std::pair<INDEX_TYPE, std::set<INDEX_TYPE>*>& crossed_face, CAnnotationEdges& ed) {
-	CTriangle T(crossed_face.first, mesh1.get());
+std::vector<CTriangle> SplitTriangle2(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2, 
+                                       const std::pair<INDEX_TYPE, std::set<INDEX_TYPE>*>& crossed_face, 
+                                       CAnnotationEdges& ed) {
+    CTriangle T(crossed_face.first, mesh1.get());
 
-	std::set<std::pair<CVertex, CVertex>> intersectionSegments;
-	intersectionSegments.clear();
+    std::set<std::pair<CVertex, CVertex>> intersectionSegments;
+    intersectionSegments.clear();
 
-	for (INDEX_TYPE i : *crossed_face.second) {
-		IntersectTriangles3D(T, CTriangle(i, mesh2.get()), intersectionSegments);
-	}
+    for (INDEX_TYPE i : *crossed_face.second) {
+        IntersectTriangles3D(T, CTriangle(i, mesh2.get()), intersectionSegments);
+    }
 
-	qInfo() << "Trojkat: " << crossed_face.first << ", Segmenty: " << intersectionSegments.size();
+    qInfo() << "Trojkat:" << crossed_face.first << ", Segmenty:" << intersectionSegments.size();
 
+    std::vector<CTriangle> nowe_trojkaty;
 
-	// TERAZ BEDZIE OSTRE CIÊCIE
+    if (intersectionSegments.empty()) {
+        // Brak przeciêæ - zachowaj oryginalny trójk¹t
+        nowe_trojkaty.push_back(T);
+        return nowe_trojkaty;
+    }
 
-	std::vector<CTriangle> nowe_trojkaty;
+    nowe_trojkaty = SubdivideTriangle(T, intersectionSegments);
 
-	nowe_trojkaty = SubdivideTriangle(T, intersectionSegments);
+    // NOWE: jeœli SubdivideTriangle() zawodzi, zachowaj oryginalny
+    if (nowe_trojkaty.empty()) {
+        qWarning() << "SubdivideTriangle zwrocilo 0 trojkatow - zachowuje oryginal";
+        nowe_trojkaty.push_back(T);
+    }
 
+    for (auto s : intersectionSegments) {
+        ed.addEdge(s.first, s.second);
+    }
 
-	//std::set<CVertex> cpts;
-
-	for (auto s : intersectionSegments) {
-		ed.addEdge(s.first, s.second);
-
-		//	cpts.insert(s.first);
-		//	cpts.insert(s.second);
-	}
-
-	//SubdivideTriangle(T, std::vector<CVertex>(cpts.begin(),cpts.end()), nowe_trojkaty);
-
-
-	return nowe_trojkaty;
+    return nowe_trojkaty;
 }
 
 
-void SplitTriangles2(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2, const std::map<INDEX_TYPE, std::set<INDEX_TYPE>*>& crossed_faces, CAnnotationEdges& ed)
+void SplitTriangles2(std::shared_ptr<CMesh> mesh1, std::shared_ptr<CMesh> mesh2,
+	const std::map<INDEX_TYPE, std::set<INDEX_TYPE>*>& crossed_faces,
+	CAnnotationEdges& ed)
 {
-	std::shared_ptr<CMesh> mesh3 = std::make_shared<CMesh>();
+	qInfo() << "=== SPLIT TRIANGLES: START ===";
+	qInfo() << "Liczba trojkatow do podzialu:" << crossed_faces.size();
 
+	std::shared_ptr<CMesh> mesh3 = std::make_shared<CMesh>();
 	std::vector<CTriangle> new_Ts;
 
+	UI::PROGRESSBAR::init(0, crossed_faces.size(), 0);
+	UI::PROGRESSBAR::setText("Splitting triangles...");
+
+	int processed = 0;
+	int skipped = 0;
+	int kept_original = 0;
+
+	auto start_time = std::chrono::steady_clock::now();
+	const int MAX_TIME_MS = 30000; // 30 sekund
+
 	for (const auto& f : crossed_faces) {
+		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now() - start_time
+		).count();
+
+		if (elapsed > MAX_TIME_MS) {
+			qWarning() << "TIMEOUT po" << elapsed << "ms - przerywam przetwarzanie";
+			qWarning() << "Przetworzono" << processed << "z" << crossed_faces.size() << "trojkatow";
+			break;
+		}
+
+		if (f.second->size() == 0) {
+			skipped++;
+			processed++;
+			continue;
+		}
+
+		qInfo() << "Przetwarzanie trojkata:" << f.first
+			<< ", przeciec z:" << f.second->size();
+
 		new_Ts = SplitTriangle2(mesh1, mesh2, f, ed);
 
-
-		for (auto new_T : new_Ts) {
-			int idx = mesh3->vertices().size();
-			mesh3->addVertex(new_T.a);
-			mesh3->addVertex(new_T.b);
-			mesh3->addVertex(new_T.c);
-			mesh3->addFace(idx, idx + 1, idx + 2);
+		if (new_Ts.empty()) {
+			qWarning() << "UWAGA: SplitTriangle2 zwrocilo 0 trojkatow dla face:" << f.first;
+			skipped++;
 		}
-		//for (auto new_T : new_Ts) {
-		//	int idx = mesh1->vertices().size();
-		//	mesh1->addVertex(new_T.a);
-		//	mesh1->addVertex(new_T.b);
-		//	mesh1->addVertex(new_T.c);
-		//	mesh1->addFace(idx, idx + 1, idx + 2);
-		//}
+		else if (new_Ts.size() == 1) {
+			kept_original++;
+			for (auto new_T : new_Ts) {
+				int idx = mesh3->vertices().size();
+				mesh3->addVertex(new_T.a);
+				mesh3->addVertex(new_T.b);
+				mesh3->addVertex(new_T.c);
+				mesh3->addFace(idx, idx + 1, idx + 2);
+			}
+		}
+		else {
+			for (auto new_T : new_Ts) {
+				int idx = mesh3->vertices().size();
+				mesh3->addVertex(new_T.a);
+				mesh3->addVertex(new_T.b);
+				mesh3->addVertex(new_T.c);
+				mesh3->addFace(idx, idx + 1, idx + 2);
+			}
+		}
+
+		processed++;
+		UI::PROGRESSBAR::setValue(processed);
+
+		// USUNIÊTE: AP::processEvents() - powoduje problemy z w¹tkami OpenGL
 	}
+
+	UI::PROGRESSBAR::hide();
+
+	qInfo() << "Przetworzono:" << processed;
+	qInfo() << "Pominieto (0 przeciec):" << skipped;
+	qInfo() << "Zachowano oryginalne:" << kept_original;
+	qInfo() << "Nowych trojkatow:" << mesh3->faces().size();
 
 	mesh3->setLabel("ZNALEZIONE");
 	AP::OBJECT::addChild(mesh1->getParentPtr(), mesh3);
 
-	//CModel3D* szczeka_obj = new CModel3D();
-	//szczeka_obj->addChild(mesh3);
-	//szczeka_obj->importChildrenGeometry();
-	//szczeka_obj->setTransform(mesh1->getGlobalTransformationMatrix());
-	//szczeka_obj->setLabel("ZNALEZIONE");
-
-	//AP::WORKSPACE::addObject(szczeka_obj);
+	qInfo() << "=== SPLIT TRIANGLES: END ===";
 }
-
